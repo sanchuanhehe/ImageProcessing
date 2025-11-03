@@ -34,6 +34,11 @@
       "name": "otherLogin",
       "pageSourceFile": "src/main/ets/generated/RouterBuilder.ets",
       "buildFunction": "OtherLoginPageBuilder"
+    },
+    {
+      "name": "nearlinkPage",
+      "pageSourceFile": "src/main/ets/generated/RouterBuilder.ets",
+      "buildFunction": "NearlinkPageBuilder"
     }
   ]
 }

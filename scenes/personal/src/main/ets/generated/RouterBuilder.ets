@@ -5,6 +5,7 @@ import { QuickLoginPage } from '../pages/QuickLoginPage';
 import { SaveSettingPage } from '../pages/SaveSetting';
 import { SettingPage } from '../pages/Setting';
 import { TermsPage } from '../pages/Terms';
+import { NearlinkPage } from '../pages/Nearlink'
 
 @Builder
 export function OpenVipBuilder() {
@@ -39,5 +40,10 @@ export function QuickLoginPageBuilder() {
 @Builder
 export function OtherLoginPageBuilder() {
   OtherLogin();
+}
+
+@Builder
+export function NearlinkPageBuilder(){
+  NearlinkPage();
 }
 

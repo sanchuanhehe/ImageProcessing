@@ -35,7 +35,7 @@ export struct NearlinkCard {
     .backgroundColor($r('sys.color.comp_background_list_card'))
     .onClick(() => {
       if (!this.loginState) {
-        this.pathStack.pushPath({ name: 'quickLoginPage' })
+        this.pathStack.pushPath({ name: 'nearlinkPage' })
       }
     })
   }
