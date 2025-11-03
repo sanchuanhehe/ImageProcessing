@@ -1,10 +1,11 @@
 import { MockService } from 'common';
 import { MainPage } from './MainPage';
 import { MinePage } from './Mine';
+import { NewPage } from './NewPage';
 
 @Entry
 @Component
-struct Index {
+  struct Index {
   @State currentIndex: number = 0
   pathStack: NavPathStack = new NavPathStack()
 
@@ -18,20 +19,26 @@ struct Index {
         .tabBar(this.tabBuilder('首页', 0, $r('app.media.homepage_fill'), $r('app.media.homepage')))
 
         TabContent() {
+          NewPage({ pathStack: this.pathStack })
+        }
+        .backgroundColor($r('app.color.main_background_color'))
+        .tabBar(this.tabBuilder('新页面', 2, $r('app.media.homepage_fill'), $r('app.media.homepage')))
+
+        TabContent() {
           MinePage({ pathStack: this.pathStack })
         }
         .backgroundColor($r('app.color.main_background_color'))
         .tabBar(this.tabBuilder('我的', 1, $r('app.media.mine_fill'), $r('app.media.mine')))
       }
       .barHeight(70)
-      .scrollable(false)
-      .onChange((index: number) => {
-        this.currentIndex = index
-      })
+        .scrollable(false)
+        .onChange((index: number) => {
+          this.currentIndex = index
+        })
     }
     .hideTitleBar(true)
-    .width('100%')
-    .height('100%')
+      .width('100%')
+      .height('100%')
   }
 
   aboutToAppear() {
@@ -52,8 +59,8 @@ struct Index {
         .margin({ top: '2%' })
     }
     .width('100%')
-    .height(50)
-    .justifyContent(FlexAlign.Center)
+      .height(50)
+      .justifyContent(FlexAlign.Center)
   }
 
 }
