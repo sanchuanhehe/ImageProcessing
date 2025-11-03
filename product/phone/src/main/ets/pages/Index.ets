@@ -22,13 +22,13 @@ import { NewPage } from './NewPage';
           NewPage({ pathStack: this.pathStack })
         }
         .backgroundColor($r('app.color.main_background_color'))
-        .tabBar(this.tabBuilder('新页面', 2, $r('app.media.homepage_fill'), $r('app.media.homepage')))
+        .tabBar(this.tabBuilder('新页面', 1, $r('app.media.homepage_fill'), $r('app.media.homepage')))
 
         TabContent() {
           MinePage({ pathStack: this.pathStack })
         }
         .backgroundColor($r('app.color.main_background_color'))
-        .tabBar(this.tabBuilder('我的', 1, $r('app.media.mine_fill'), $r('app.media.mine')))
+        .tabBar(this.tabBuilder('我的', 2, $r('app.media.mine_fill'), $r('app.media.mine')))
       }
       .barHeight(70)
         .scrollable(false)
