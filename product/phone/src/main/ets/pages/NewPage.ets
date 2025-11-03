@@ -1,5 +1,5 @@
 import { TitleBar } from 'common';
-import { OpenVipCard, SettingAndHelpCard, UserCard } from 'personal';
+import { NearlinkCard } from 'personal';
 import { promptAction } from '@kit.ArkUI';
 
 @Component
@@ -18,6 +18,8 @@ export struct NewPage {
         pathStack: this.pathStack
       }).margin({ bottom: 20 })
 
+      NearlinkCard({ pathStack: this.pathStack })
+      .margin({ bottom: 16 })
     }
     .width('100%')
     .height('100%')
