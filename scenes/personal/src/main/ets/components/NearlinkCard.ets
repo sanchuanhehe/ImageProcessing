@@ -12,7 +12,7 @@ export struct NearlinkCard {
         Text('点击传图')
           .fontWeight(FontWeight.Medium)
           .fontSize(18)
-        Text('登录后享受更多服务')
+        Text('传输你的图片到对端')
           .fontWeight(FontWeight.Medium)
           .fontSize(12)
       }
@@ -36,6 +36,7 @@ export struct NearlinkCard {
     .onClick(() => {
       if (!this.loginState) {
         this.pathStack.pushPath({ name: 'nearlinkPage' })
+        // this.pathStack.pushDestinationByName('nearlinkPage', undefined)
       }
     })
   }
