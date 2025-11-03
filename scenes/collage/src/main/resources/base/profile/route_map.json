@@ -1,0 +1,9 @@
+{
+  "routerMap": [
+    {
+      "name": "pictureCollage",
+      "pageSourceFile": "src/main/ets/generated/RouterBuilder.ets",
+      "buildFunction": "PictureCollageBuilder"
+    }
+  ]
+}

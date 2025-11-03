@@ -1,0 +1,12 @@
+{
+  "name": "collage",
+  "version": "1.0.0",
+  "description": "Please describe the basic information.",
+  "main": "Index.ets",
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "common": "file:../../common",
+    "picture_collage" : "file:../../components/picture_collage"
+  }
+}

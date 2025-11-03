@@ -1,0 +1,16 @@
+{
+  "name": "phone",
+  "version": "1.0.0",
+  "description": "Please describe the basic information.",
+  "main": "",
+  "author": "",
+  "license": "",
+  "dependencies": {
+    "common": "file:../../common/",
+    "picture_beautification": "file:../../scenes/picture_beautification",
+    "personal": "file:../../scenes/personal",
+    "collage": "file:../../scenes/collage"
+  },
+  "devDependencies": {},
+  "dynamicDependencies": {}
+}

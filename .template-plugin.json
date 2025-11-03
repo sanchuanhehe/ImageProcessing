@@ -1,0 +1,23 @@
+{
+  "ignoreFiles": [
+    "**/build/**",
+    "**/oh_modules/**",
+    "**/node_modules/**",
+    "*.p12",
+    "agcit_declare.json",
+    "**/bac/**",
+    "**/bacOutPut/**",
+    "**/hw_sign/**",
+    "local.properties",
+    "oh-package-lock.json5",
+    "_oh-project.json",
+    ".cloudbuild/**",
+    ".hvigor/**",
+    ".idea/**",
+    ".clang-format"
+  ],
+  "maskDependencies": [
+    "@hw-agconnect/template-plugin",
+    "@ohos/hvigor-ohos-online-sign-plugin"
+  ]
+}

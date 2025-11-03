@@ -1,0 +1,20 @@
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "ShootingImageProcessingTemplate"
+    },
+    {
+      "name": "agcit_huawei_image_processing",
+      "value": "1.0.0"
+    },
+    {
+      "name": "agcittype_huawei_image_processing",
+      "value": "industryTemplate"
+    },
+    {
+      "name": "agcitkid_huawei_image_processing",
+      "value": "agcit_huawei_image_processing_picture_collage/1.0.0"
+    }
+  ]
+}

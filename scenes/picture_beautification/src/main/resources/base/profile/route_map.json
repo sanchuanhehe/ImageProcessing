@@ -1,0 +1,9 @@
+{
+  "routerMap": [
+    {
+      "name": "pictureBeautification",
+      "pageSourceFile": "src/main/ets/generated/RouterBuilder.ets",
+      "buildFunction": "PictureBeautificationBuilder"
+    }
+  ]
+}

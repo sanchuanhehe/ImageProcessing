@@ -1,0 +1,9 @@
+{
+  "module": {
+    "name": "picture_collage",
+    "type": "har",
+    "deviceTypes": [
+      "default"
+    ]
+  }
+}
