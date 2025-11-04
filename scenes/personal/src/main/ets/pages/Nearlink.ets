@@ -5,6 +5,9 @@ import { scan } from '@kit.NearLinkKit';
 import { SleClientService } from '../services/SleClientService';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { image } from '@kit.ImageKit';
+import { fileIo as fs } from '@kit.CoreFileKit';
+import { dataSharePredicates } from '@kit.ArkData';
+import { common } from '@kit.AbilityKit';
 
 export const PHONE_REG = /^[1][3,4,5,6,7,8,9][0-9]{9}$/;
 
@@ -27,7 +30,12 @@ export struct NearlinkPage {
   @State transferProgress: number = 0;
   
   // SLE 客户端服务
-  private sleClientService: SleClientService = SleClientService.getInstance();  // 安全显示 Toast 消息
+  private sleClientService: SleClientService = SleClientService.getInstance();
+  
+  // 获取UIAbilityContext
+  private getContext(): common.UIAbilityContext {
+    return this.getUIContext().getHostContext() as common.UIAbilityContext;
+  }  // 安全显示 Toast 消息
   private showToast(message: string): void {
     try {
       promptAction.showToast({ message: message });
@@ -199,7 +207,7 @@ export struct NearlinkPage {
           .fontSize(16)
           .fontWeight(FontWeight.Medium)
         Blank()
-        Text('支持 240×416 尺寸')
+        Text('仅支持 240×416 尺寸')
           .fontSize(12)
           .fontColor($r('sys.color.ohos_id_color_text_tertiary'))
       }
@@ -222,7 +230,11 @@ export struct NearlinkPage {
             Text('选择图片')
               .fontSize(12)
               .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-              .margin({ top: 8 })
+              .margin({ top: 4 })
+            Text('必须为240×416尺寸')
+              .fontSize(10)
+              .fontColor($r('sys.color.ohos_id_color_text_tertiary'))
+              .margin({ top: 2 })
           }
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
@@ -407,38 +419,114 @@ export struct NearlinkPage {
       
       // 选择图片并获取图片URI
       const result = await photoViewPicker.select(photoSelectOptions);
-      if (result.photoUris.length > 0) {
+      if (result.photoUris && result.photoUris.length > 0) {
         const imageUri = result.photoUris[0];
+        console.log(`Selected image URI: ${imageUri}`);
         
-        // 验证图片尺寸
+        // 立即验证图片尺寸
+        this.showToast('正在验证图片尺寸...');
+        
         const isValid = await this.validateImageSize(imageUri);
         if (isValid) {
           this.selectedImageUri = imageUri;
           this.showToast('图片选择成功');
         } else {
+          this.selectedImageUri = '';
           this.showToast('请选择 240×416 尺寸的图片');
         }
+      } else {
+        this.showToast('未选择任何图片');
       }
     } catch (error) {
       const err = error as BusinessError;
+      console.error('Choose picture failed:', err);
       this.showToast(`选择图片失败: ${err.message}`);
     }
   }
 
-  // 验证图片尺寸
+  // 验证图片尺寸 - 使用PhotoAccessHelper标准方法
   async validateImageSize(imageUri: string): Promise<boolean> {
     try {
-      // 创建ImageSource
-      const imageSource = image.createImageSource(imageUri);
+      console.log(`Validating media URI: ${imageUri}`);
       
-      // 获取图片信息
-      const imageInfo = await imageSource.getImageInfo();
-      
-      // 检查尺寸是否为 240×416
-      const isValidSize = imageInfo.size.width === 240 && imageInfo.size.height === 416;
-      console.log(`Image size: ${imageInfo.size.width}x${imageInfo.size.height}, valid: ${isValidSize}`);
-      
-      return isValidSize;
+      // 验证URI是否有效
+      if (!imageUri || imageUri.trim() === '') {
+        console.error('Invalid image URI: empty or null');
+        return false;
+      }
+
+      // 方法1: 使用PhotoAccessHelper获取图片信息（推荐方法）
+      try {
+        const context = this.getContext();
+        const phAccessHelper = photoAccessHelper.getPhotoAccessHelper(context);
+        const predicates = new dataSharePredicates.DataSharePredicates();
+        
+        // 配置查询条件，使用PhotoViewPicker返回的uri进行查询
+        predicates.equalTo('uri', imageUri);
+        
+        const fetchOption: photoAccessHelper.FetchOptions = {
+          fetchColumns: [
+            photoAccessHelper.PhotoKeys.WIDTH, 
+            photoAccessHelper.PhotoKeys.HEIGHT,
+            photoAccessHelper.PhotoKeys.DISPLAY_NAME
+          ],
+          predicates: predicates
+        };
+        
+        const fetchResult = await phAccessHelper.getAssets(fetchOption);
+        const asset = await fetchResult.getFirstObject();
+        
+        if (asset) {
+          const width = asset.get(photoAccessHelper.PhotoKeys.WIDTH) as number;
+          const height = asset.get(photoAccessHelper.PhotoKeys.HEIGHT) as number;
+          const displayName = asset.get(photoAccessHelper.PhotoKeys.DISPLAY_NAME) as string;
+          const isValidSize = width === 240 && height === 416;
+          
+          console.log(`PhotoAccessHelper - Image: ${displayName}, Size: ${width}x${height}, Required: 240x416, Valid: ${isValidSize}`);
+          
+          if (!isValidSize) {
+            console.warn(`Size mismatch: expected 240x416, got ${width}x${height}`);
+          }
+          
+          // 关闭fetchResult
+          fetchResult.close();
+          
+          return isValidSize;
+        } else {
+          console.error('Failed to get PhotoAsset from URI');
+        }
+        
+        // 关闭fetchResult
+        fetchResult.close();
+      } catch (photoAccessError) {
+        console.warn('PhotoAccessHelper method failed, trying fallback method:', photoAccessError);
+      }
+
+      // 方法2: 直接使用ImageSource作为备用方法
+      try {
+        const imageSource = image.createImageSource(imageUri);
+        if (imageSource) {
+          const imageInfo = await imageSource.getImageInfo();
+          if (imageInfo && imageInfo.size) {
+            const width = imageInfo.size.width;
+            const height = imageInfo.size.height;
+            const isValidSize = width === 240 && height === 416;
+            
+            console.log(`Fallback ImageSource - Size: ${width}x${height}, Required: 240x416, Valid: ${isValidSize}`);
+            
+            if (!isValidSize) {
+              console.warn(`Size mismatch: expected 240x416, got ${width}x${height}`);
+            }
+            
+            return isValidSize;
+          }
+        }
+      } catch (imageSourceError) {
+        console.error('ImageSource fallback method failed:', imageSourceError);
+      }
+
+      console.error('All validation methods failed');
+      return false;
     } catch (error) {
       console.error('Validate image size failed:', error);
       return false;
@@ -455,6 +543,14 @@ export struct NearlinkPage {
     try {
       this.isTransferring = true;
       this.transferProgress = 0;
+      
+      // 发送前再次验证图片尺寸
+      const isValid = await this.validateImageSize(this.selectedImageUri);
+      if (!isValid) {
+        this.showToast('图片尺寸不符合要求（需要240×416）');
+        this.selectedImageUri = ''; // 清空不合格的图片
+        return;
+      }
       
       // 获取图片数据
       const imageData = await this.getImageArrayBuffer(this.selectedImageUri);
@@ -482,26 +578,105 @@ export struct NearlinkPage {
     }
   }
 
-  // 获取图片的ArrayBuffer数据
+  // 获取图片的ArrayBuffer数据 - 使用PhotoAccessHelper标准方法
   async getImageArrayBuffer(imageUri: string): Promise<ArrayBuffer> {
     try {
-      // 创建ImageSource
-      const imageSource = image.createImageSource(imageUri);
+      console.log(`Getting image data from media URI: ${imageUri}`);
       
-      // 创建PixelMap
-      const pixelMap = await imageSource.createPixelMap();
+      // 验证URI
+      if (!imageUri || imageUri.trim() === '') {
+        throw new Error('图片URI无效');
+      }
+
+      // 方法1: 使用PhotoAccessHelper获取PhotoAsset然后创建PixelMap（推荐方法）
+      try {
+        const context = this.getContext();
+        const phAccessHelper = photoAccessHelper.getPhotoAccessHelper(context);
+        const predicates = new dataSharePredicates.DataSharePredicates();
+        
+        predicates.equalTo('uri', imageUri);
+        
+        const fetchOption: photoAccessHelper.FetchOptions = {
+          fetchColumns: [
+            photoAccessHelper.PhotoKeys.WIDTH, 
+            photoAccessHelper.PhotoKeys.HEIGHT
+          ],
+          predicates: predicates
+        };
+        
+        const fetchResult = await phAccessHelper.getAssets(fetchOption);
+        const asset = await fetchResult.getFirstObject();
+        
+        if (asset) {
+          console.log(`PhotoAccessHelper - Getting pixel data for: ${asset.displayName}`);
+          
+          // 使用PhotoAsset创建ImageSource
+          const imageSource = image.createImageSource(asset.uri);
+          if (imageSource) {
+            const pixelMap = await imageSource.createPixelMap();
+            if (pixelMap) {
+              const imageInfo = await pixelMap.getImageInfo();
+              if (imageInfo && imageInfo.size) {
+                const width = imageInfo.size.width;
+                const height = imageInfo.size.height;
+                
+                console.log(`PhotoAccessHelper - Image size: ${width}x${height}`);
+                
+                const rowDataSize = width * 4; // RGBA，每像素4字节
+                const bufferSize = rowDataSize * height;
+                const buffer = new ArrayBuffer(bufferSize);
+                await pixelMap.readPixelsToBuffer(buffer);
+                
+                // 关闭资源
+                fetchResult.close();
+                
+                console.log(`PhotoAccessHelper - Successfully read ${buffer.byteLength} bytes`);
+                return buffer;
+              }
+            }
+          }
+        }
+        
+        // 确保关闭fetchResult
+        fetchResult.close();
+      } catch (photoAccessError) {
+        console.warn('PhotoAccessHelper method failed, trying fallback:', photoAccessError);
+      }
+
+      // 方法2: 直接使用URI创建ImageSource作为备用方法
+      try {
+        console.log('Using fallback ImageSource method...');
+        
+        const imageSource = image.createImageSource(imageUri);
+        if (imageSource) {
+          const pixelMap = await imageSource.createPixelMap();
+          if (pixelMap) {
+            const imageInfo = await pixelMap.getImageInfo();
+            if (imageInfo && imageInfo.size) {
+              const width = imageInfo.size.width;
+              const height = imageInfo.size.height;
+              
+              console.log(`Fallback - Image size: ${width}x${height}`);
+              
+              const rowDataSize = width * 4;
+              const bufferSize = rowDataSize * height;
+              const buffer = new ArrayBuffer(bufferSize);
+              await pixelMap.readPixelsToBuffer(buffer);
+              
+              console.log(`Fallback - Successfully read ${buffer.byteLength} bytes`);
+              return buffer;
+            }
+          }
+        }
+      } catch (fallbackError) {
+        console.error('Fallback method also failed:', fallbackError);
+      }
+
+      throw new Error('所有方法都无法读取图片数据');
       
-      // 获取图片数据
-      const imageInfo = await pixelMap.getImageInfo();
-      const rowDataSize = imageInfo.size.width * 4; // RGBA，每像素4字节
-      const bufferSize = rowDataSize * imageInfo.size.height;
-      
-      const buffer = new ArrayBuffer(bufferSize);
-      await pixelMap.readPixelsToBuffer(buffer);
-      
-      return buffer;
     } catch (error) {
       const err = error as BusinessError;
+      console.error('Get image array buffer failed:', err);
       throw new Error(`获取图片数据失败: ${err.message}`);
     }
   }
