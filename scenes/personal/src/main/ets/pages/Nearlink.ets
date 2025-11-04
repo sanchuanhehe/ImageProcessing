@@ -11,6 +11,20 @@ import { common } from '@kit.AbilityKit';
 
 export const PHONE_REG = /^[1][3,4,5,6,7,8,9][0-9]{9}$/;
 
+// 定义颜色接口
+interface Color {
+  r: number;
+  g: number;
+  b: number;
+}
+
+// 定义权重接口
+interface Weight {
+  dx: number;
+  dy: number;
+  weight: number;
+}
+
 @Component
 export struct NearlinkPage {
   @StorageProp('topRectHeight') topRectHeight: number = 0;
@@ -41,11 +55,11 @@ export struct NearlinkPage {
   }
 
   // 4色调色板
-  private colors = [
-    { r: 0, g: 0, b: 0 },           // 黑色 0x000000 => 0x0
-    { r: 255, g: 255, b: 255 },     // 白色 0xffffff => 0x1
-    { r: 255, g: 255, b: 0 },       // 黄色 0xffff00 => 0x2
-    { r: 255, g: 0, b: 0 },         // 红色 0xff0000 => 0x3
+  private colors: Color[] = [
+    { r: 0, g: 0, b: 0 } as Color,           // 黑色 0x000000 => 0x0
+    { r: 255, g: 255, b: 255 } as Color,     // 白色 0xffffff => 0x1
+    { r: 255, g: 255, b: 0 } as Color,       // 黄色 0xffff00 => 0x2
+    { r: 255, g: 0, b: 0 } as Color,         // 红色 0xff0000 => 0x3
   ];
 
   // 目标尺寸
@@ -815,7 +829,7 @@ export struct NearlinkPage {
         const index = (y * width + x) * 4;
         
         // 获取原始像素
-        const oldPixel = {
+        const oldPixel: Color = {
           r: pixels[index],
           g: pixels[index + 1],
           b: pixels[index + 2]
@@ -844,7 +858,7 @@ export struct NearlinkPage {
   }
 
   // 找到最接近的颜色
-  private findNearestColor(pixel: { r: number, g: number, b: number }): { r: number, g: number, b: number } {
+  private findNearestColor(pixel: Color): Color {
     let nearestColor = this.colors[0];
     let minDistance = this.colorDistance(pixel, this.colors[0]);
     
@@ -860,7 +874,7 @@ export struct NearlinkPage {
   }
 
   // 计算颜色距离
-  private colorDistance(c1: { r: number, g: number, b: number }, c2: { r: number, g: number, b: number }): number {
+  private colorDistance(c1: Color, c2: Color): number {
     return Math.sqrt(
       Math.pow(c1.r - c2.r, 2) +
       Math.pow(c1.g - c2.g, 2) +
@@ -880,14 +894,17 @@ export struct NearlinkPage {
     quantErrorB: number
   ): void {
     // Floyd-Steinberg权重
-    const weights = [
-      { dx: 1, dy: 0, weight: 7 / 16 },   // 右
-      { dx: -1, dy: 1, weight: 3 / 16 },  // 左下
-      { dx: 0, dy: 1, weight: 5 / 16 },   // 下
-      { dx: 1, dy: 1, weight: 1 / 16 }    // 右下
+    const weights: Weight[] = [
+      { dx: 1, dy: 0, weight: 7 / 16 } as Weight,   // 右
+      { dx: -1, dy: 1, weight: 3 / 16 } as Weight,  // 左下
+      { dx: 0, dy: 1, weight: 5 / 16 } as Weight,   // 下
+      { dx: 1, dy: 1, weight: 1 / 16 } as Weight    // 右下
     ];
 
-    weights.forEach(({ dx, dy, weight }) => {
+    weights.forEach((w: Weight) => {
+      const dx = w.dx;
+      const dy = w.dy;
+      const weight = w.weight;
       const nx = x + dx;
       const ny = y + dy;
       
@@ -919,7 +936,7 @@ export struct NearlinkPage {
       return pixelMap;
     } catch (error) {
       console.error('Create PixelMap from buffer failed:', error);
-      throw error;
+      throw new Error(`Create PixelMap from buffer failed: ${error}`);
     }
   }
 
