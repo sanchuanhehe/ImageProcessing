@@ -44,7 +44,10 @@ export struct NearlinkPage {
   @State isProcessing: boolean = false;
   @State isTransferring: boolean = false;
   @State transferProgress: number = 0;
-  @State processedDataArray: Uint8Array = new Uint8Array();
+  @State processedDataLength: number = 0; // 只存储长度，用于UI更新
+  
+  // 使用普通属性存储TypedArray数据，避免@State的包装问题
+  private processedDataArray: Uint8Array = new Uint8Array();
   
   // SLE 客户端服务
   private sleClientService: SleClientService = SleClientService.getInstance();
@@ -56,12 +59,7 @@ export struct NearlinkPage {
 
   // 安全获取处理后的数据长度
   private getProcessedDataLength(): number {
-    try {
-      return this.processedDataArray?.length || 0;
-    } catch (error) {
-      console.error('Error getting processed data length:', error);
-      return 0;
-    }
+    return this.processedDataLength;
   }
 
   // 4色调色板
@@ -533,6 +531,7 @@ export struct NearlinkPage {
     this.isTransferring = false;
     this.transferProgress = 0;
     this.processedDataArray = new Uint8Array();
+    this.processedDataLength = 0;
   }
 
   // 开始连接状态监听
@@ -918,6 +917,7 @@ export struct NearlinkPage {
       
       // 生成C数组数据
       this.processedDataArray = this.generateCArrayData(processedBuffer, imageInfo.size.width, imageInfo.size.height);
+      this.processedDataLength = this.processedDataArray.length; // 更新长度用于UI显示
       
       // 释放资源
       pixelMap.release();
@@ -1248,7 +1248,7 @@ export struct NearlinkPage {
 
   // 发送处理后的图片数据
   async sendProcessedImage(): Promise<void> {
-    if (!this.processedDataArray?.length || !this.isConnected) {
+    if (!this.processedDataArray || this.processedDataArray.length === 0 || !this.isConnected) {
       this.showToast('无法发送图片');
       return;
     }
