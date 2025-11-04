@@ -2,6 +2,14 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { scan, ssap, constant } from '@kit.NearLinkKit';
 
+interface TransferStats {
+  totalPackets: number;
+  sentPackets: number;
+  retransmittedPackets: number;
+  startTime: number;
+  lastPacketTime: number;
+}
+
 /**
  * SLE 客户端服务管理类
  * 基于 NearLink Kit API 实现图片传输功能
@@ -29,7 +37,7 @@ export class SleClientService {
   private isTransferring: boolean = false;
   
   // 传输统计信息
-  private transferStats = {
+  private transferStats: TransferStats = {
     totalPackets: 0,
     sentPackets: 0,
     retransmittedPackets: 0,
