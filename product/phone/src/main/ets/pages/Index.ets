@@ -29,7 +29,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
         NewPage({ pathStack: this.pathStack })
       }
       .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
-      .tabBar(this.tabBuilder('新页面', 1, $r('app.media.homepage_fill'), $r('app.media.homepage')))
+      .tabBar(this.tabBuilder('传图', 1, $r('app.media.homepage_fill'), $r('app.media.homepage')))
 
       TabContent() {
         MinePage({ pathStack: this.pathStack })
