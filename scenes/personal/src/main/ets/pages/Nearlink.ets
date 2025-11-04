@@ -3,6 +3,8 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { promptAction } from '@kit.ArkUI';
 import { scan } from '@kit.NearLinkKit';
 import { SleClientService } from '../services/SleClientService';
+import { photoAccessHelper } from '@kit.MediaLibraryKit';
+import { image } from '@kit.ImageKit';
 
 export const PHONE_REG = /^[1][3,4,5,6,7,8,9][0-9]{9}$/;
 
@@ -18,11 +20,14 @@ export struct NearlinkPage {
   @State isConnected: boolean = false;
   @State connectedDeviceName: string = '';
   @State connectionStatus: string = '未连接';
-
+  
+  // 图片传输相关状态
+  @State selectedImageUri: string = '';
+  @State isTransferring: boolean = false;
+  @State transferProgress: number = 0;
+  
   // SLE 客户端服务
-  private sleClientService: SleClientService = SleClientService.getInstance();
-
-  // 安全显示 Toast 消息
+  private sleClientService: SleClientService = SleClientService.getInstance();  // 安全显示 Toast 消息
   private showToast(message: string): void {
     try {
       promptAction.showToast({ message: message });
@@ -55,6 +60,11 @@ export struct NearlinkPage {
 
         // 设备扫描和连接区域
         this.DeviceScanArea()
+
+        // 图片传输区域 - 仅在已连接时显示
+        if (this.isConnected) {
+          this.ImageTransferArea()
+        }
 
         Blank()
       }
@@ -175,15 +185,107 @@ export struct NearlinkPage {
       }
     }
     .alignItems(HorizontalAlign.Start)
-      .backgroundColor($r('sys.color.comp_background_list_card'))
-      .borderRadius(16)
-      .padding(12)
-      .margin({ left: 16, right: 16, bottom: 16 })
+    .backgroundColor($r('sys.color.comp_background_list_card'))
+    .borderRadius(16)
+    .padding(12)
+    .margin({ left: 16, right: 16, bottom: 16 })
   }
 
+  @Builder
+  ImageTransferArea() {
+    Column() {
+      Row() {
+        Text('图片传输')
+          .fontSize(16)
+          .fontWeight(FontWeight.Medium)
+        Blank()
+        Text('支持 240×416 尺寸')
+          .fontSize(12)
+          .fontColor($r('sys.color.ohos_id_color_text_tertiary'))
+      }
+      .width('100%')
+      .margin({ bottom: 12 })
 
+      // 图片选择区域
+      Column() {
+        if (this.selectedImageUri) {
+          Image(this.selectedImageUri)
+            .width(120)
+            .height(208) // 保持 240:416 的比例
+            .borderRadius(8)
+            .objectFit(ImageFit.Contain)
+        } else {
+          Column() {
+            Image($r('app.media.add_image'))
+              .width(24)
+              .height(24)
+            Text('选择图片')
+              .fontSize(12)
+              .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+              .margin({ top: 8 })
+          }
+          .justifyContent(FlexAlign.Center)
+          .alignItems(HorizontalAlign.Center)
+          .width(120)
+          .height(208)
+          .borderRadius(8)
+          .backgroundColor('#E5E5EA')
+        }
+      }
+      .onClick(() => {
+        this.choosePicture()
+      })
 
+      // 传输进度
+      if (this.isTransferring) {
+        Column() {
+          Text(`传输中... ${Math.round(this.transferProgress)}%`)
+            .fontSize(12)
+            .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+            .margin({ top: 8, bottom: 4 })
+          Progress({
+            value: this.transferProgress,
+            total: 100,
+            type: ProgressType.Linear
+          })
+          .width('100%')
+          .height(4)
+        }
+        .width('100%')
+        .margin({ top: 12 })
+      }
 
+      // 传输按钮
+      if (this.selectedImageUri && !this.isTransferring) {
+        Row() {
+          Button('发送图片')
+            .fontSize(14)
+            .backgroundColor(Color.Blue)
+            .fontColor(Color.White)
+            .onClick(() => {
+              this.sendSelectedImage()
+            })
+          
+          Blank()
+          
+          Button('重新选择')
+            .fontSize(14)
+            .backgroundColor(Color.Orange)
+            .fontColor(Color.White)
+            .onClick(() => {
+              this.selectedImageUri = ''
+            })
+        }
+        .width('100%')
+        .margin({ top: 12 })
+      }
+    }
+    .alignItems(HorizontalAlign.Start)
+    .backgroundColor($r('sys.color.comp_background_list_card'))
+    .borderRadius(16)
+    .padding(12)
+    .margin({ left: 16, right: 16, bottom: 16 })
+  }
 
   // 开始扫描设备
   async startScan(): Promise<void> {
@@ -267,6 +369,10 @@ export struct NearlinkPage {
     this.isConnected = false;
     this.connectedDeviceName = '';
     this.connectionStatus = '未连接';
+    // 清理传图状态
+    this.selectedImageUri = '';
+    this.isTransferring = false;
+    this.transferProgress = 0;
   }
 
   // 开始连接状态监听
@@ -286,5 +392,116 @@ export struct NearlinkPage {
       }
     };
     setTimeout(checkConnection, 2000);
+  }
+
+  // 选择图片
+  async choosePicture(): Promise<void> {
+    try {
+      // 设置图片选择器选项
+      const photoSelectOptions = new photoAccessHelper.PhotoSelectOptions();
+      photoSelectOptions.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE;
+      photoSelectOptions.maxSelectNumber = 1;
+      
+      // 创建并实例化图片选择器
+      const photoViewPicker = new photoAccessHelper.PhotoViewPicker();
+      
+      // 选择图片并获取图片URI
+      const result = await photoViewPicker.select(photoSelectOptions);
+      if (result.photoUris.length > 0) {
+        const imageUri = result.photoUris[0];
+        
+        // 验证图片尺寸
+        const isValid = await this.validateImageSize(imageUri);
+        if (isValid) {
+          this.selectedImageUri = imageUri;
+          this.showToast('图片选择成功');
+        } else {
+          this.showToast('请选择 240×416 尺寸的图片');
+        }
+      }
+    } catch (error) {
+      const err = error as BusinessError;
+      this.showToast(`选择图片失败: ${err.message}`);
+    }
+  }
+
+  // 验证图片尺寸
+  async validateImageSize(imageUri: string): Promise<boolean> {
+    try {
+      // 创建ImageSource
+      const imageSource = image.createImageSource(imageUri);
+      
+      // 获取图片信息
+      const imageInfo = await imageSource.getImageInfo();
+      
+      // 检查尺寸是否为 240×416
+      const isValidSize = imageInfo.size.width === 240 && imageInfo.size.height === 416;
+      
+      return isValidSize;
+    } catch (error) {
+      console.error('Validate image size failed:', error);
+      return false;
+    }
+  }
+
+  // 发送选中的图片
+  async sendSelectedImage(): Promise<void> {
+    if (!this.selectedImageUri || !this.isConnected) {
+      this.showToast('无法发送图片');
+      return;
+    }
+
+    try {
+      this.isTransferring = true;
+      this.transferProgress = 0;
+      
+      // 获取图片数据
+      const imageData = await this.getImageArrayBuffer(this.selectedImageUri);
+      
+      // 发送图片数据，带进度回调
+      const success = await this.sleClientService.sendImageData(
+        imageData,
+        (sent: number, total: number) => {
+          this.transferProgress = (sent / total) * 100;
+        }
+      );
+      
+      if (success) {
+        this.showToast('图片传输成功');
+        this.selectedImageUri = ''; // 清空已选择的图片
+      } else {
+        this.showToast('图片传输失败');
+      }
+    } catch (error) {
+      const err = error as BusinessError;
+      this.showToast(`传输失败: ${err.message}`);
+    } finally {
+      this.isTransferring = false;
+      this.transferProgress = 0;
+    }
+  }
+
+  // 获取图片的ArrayBuffer数据
+  async getImageArrayBuffer(imageUri: string): Promise<ArrayBuffer> {
+    try {
+      // 创建ImageSource
+      const imageSource = image.createImageSource(imageUri);
+      
+      // 创建PixelMap
+      const pixelMap = await imageSource.createPixelMap();
+      
+      // 获取图片数据
+      const imageInfo = await pixelMap.getImageInfo();
+      const rowDataSize = imageInfo.size.width * 4; // RGBA，每像素4字节
+      const bufferSize = rowDataSize * imageInfo.size.height;
+      
+      const buffer = new ArrayBuffer(bufferSize);
+      await pixelMap.readPixelsToBuffer(buffer);
+      
+      return buffer;
+    } catch (error) {
+      const err = error as BusinessError;
+      throw new Error(`获取图片数据失败: ${err.message}`);
+    }
   }
 }
