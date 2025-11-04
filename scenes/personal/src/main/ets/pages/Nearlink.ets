@@ -11,14 +11,14 @@ export struct NearlinkPage {
   @StorageProp('topRectHeight') topRectHeight: number = 0;
   @StorageProp('bottomRectHeight') bottomRectHeight: number = 0;
   pathStack: NavPathStack = new NavPathStack();
-
+  
   // SLE 连接相关状态
   @State scanResults: Array<scan.ScanResults> = [];
   @State isScanning: boolean = false;
   @State isConnected: boolean = false;
   @State connectedDeviceName: string = '';
   @State connectionStatus: string = '未连接';
-
+  
   // SLE 客户端服务
   private sleClientService: SleClientService = SleClientService.getInstance();
 
@@ -59,17 +59,17 @@ export struct NearlinkPage {
         Blank()
       }
       .width('100%')
-        .height('100%')
+      .height('100%')
     }
     .onReady((ctx: NavDestinationContext) => {
       this.pathStack = ctx.pathStack
     })
-      .hideTitleBar(true)
-      .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
-      .padding({
-        top: this.topRectHeight,
-        bottom: this.bottomRectHeight
-      })
+    .hideTitleBar(true)
+    .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
+    .padding({
+      top: this.topRectHeight,
+      bottom: this.bottomRectHeight
+    })
   }
 
   @Builder
@@ -88,11 +88,11 @@ export struct NearlinkPage {
           .fontColor($r('sys.color.ohos_id_color_text_tertiary'))
       }
       .width('100%')
-        .padding(12)
+      .padding(12)
     }
     .backgroundColor($r('sys.color.comp_background_list_card'))
-      .borderRadius(16)
-      .margin({ left: 16, right: 16, bottom: 16 })
+    .borderRadius(16)
+    .margin({ left: 16, right: 16, bottom: 16 })
   }
 
   @Builder
@@ -115,7 +115,7 @@ export struct NearlinkPage {
           })
       }
       .width('100%')
-        .margin({ bottom: 12 })
+      .margin({ bottom: 12 })
 
       if (this.scanResults.length > 0) {
         List() {
@@ -139,13 +139,13 @@ export struct NearlinkPage {
                   })
               }
               .width('100%')
-                .padding(8)
+              .padding(8)
             }
           })
         }
         .height(120)
-          .borderRadius(8)
-          .backgroundColor($r('sys.color.ohos_id_color_background'))
+        .borderRadius(8)
+        .backgroundColor($r('sys.color.ohos_id_color_background'))
       } else if (this.isScanning) {
         Text('正在扫描设备...')
           .fontSize(12)
@@ -156,10 +156,10 @@ export struct NearlinkPage {
       }
     }
     .alignItems(HorizontalAlign.Start)
-      .backgroundColor($r('sys.color.comp_background_list_card'))
-      .borderRadius(16)
-      .padding(12)
-      .margin({ left: 16, right: 16, bottom: 16 })
+    .backgroundColor($r('sys.color.comp_background_list_card'))
+    .borderRadius(16)
+    .padding(12)
+    .margin({ left: 16, right: 16, bottom: 16 })
   }
 
 
@@ -172,7 +172,7 @@ export struct NearlinkPage {
       this.isScanning = true;
       this.scanResults = [];
       await this.sleClientService.startScan();
-
+      
       // 定期更新扫描结果
       const updateResults = () => {
         if (this.isScanning) {
@@ -181,10 +181,10 @@ export struct NearlinkPage {
         }
       };
       updateResults();
-
+      
       try {
         promptAction.showToast({ message: '开始扫描设备' });
-      } catch (e) { }
+      } catch (e) {}
     } catch (error) {
       this.isScanning = false;
       const err = error as BusinessError;
@@ -209,7 +209,7 @@ export struct NearlinkPage {
     try {
       this.connectionStatus = '连接中...';
       await this.stopScan(); // 连接前停止扫描
-
+      
       const success = await this.sleClientService.connectToDevice(address);
       if (success) {
         this.isConnected = true;
@@ -226,4 +226,8 @@ export struct NearlinkPage {
       this.showToast(`连接失败: ${err.message}`);
     }
   }
+
+
+
+
 }
