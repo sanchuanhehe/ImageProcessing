@@ -14,10 +14,11 @@ export class SleClientService {
   private isConnected: boolean = false;
   private connectedDeviceAddress: string = '';
   
-  // 图片传输服务 UUID（与服务端保持一致）
-  private readonly IMAGE_SERVICE_UUID = '1234';
-  private readonly IMAGE_DATA_PROPERTY_UUID = '5678';
-  private readonly IMAGE_CONTROL_PROPERTY_UUID = '9ABC';
+  // 图片传输服务 UUID（与服务端保持一致）- 基于服务端base UUID构造
+  // 服务端base UUID: 37BEA880-FC70-11EA-B720-0000
+  private readonly IMAGE_SERVICE_UUID = '37BEA880-FC70-11EA-B720-000000001234';
+  private readonly IMAGE_DATA_PROPERTY_UUID = '37BEA880-FC70-11EA-B720-000000005678';
+  private readonly IMAGE_CONTROL_PROPERTY_UUID = '37BEA880-FC70-11EA-B720-00000000AB9C';
   
   // 日志标签
   private readonly logTag: string = 'SleClientService';
@@ -218,6 +219,13 @@ export class SleClientService {
         value: commandData
       };
 
+      // 调试日志：显示UUID值
+      hilog.info(this.domainId, this.logTag, `=== UUID Debug Info ===`);
+      hilog.info(this.domainId, this.logTag, `Service UUID: ${this.IMAGE_SERVICE_UUID}`);
+      hilog.info(this.domainId, this.logTag, `Property UUID: ${this.IMAGE_CONTROL_PROPERTY_UUID}`);
+      hilog.info(this.domainId, this.logTag, `Command: ${command}`);
+      hilog.info(this.domainId, this.logTag, `======================`);
+
       // 写入控制命令 - 使用 WRITE_NO_RESPONSE 类型以提高传输效率
       await this.client.writeProperty(controlProperty, ssap.PropertyWriteType.WRITE_NO_RESPONSE);
       hilog.info(this.domainId, this.logTag, `Sent control command: ${command}`);
@@ -245,6 +253,13 @@ export class SleClientService {
         propertyUuid: this.IMAGE_DATA_PROPERTY_UUID,
         value: packetData
       };
+
+      // 调试日志：显示UUID值
+      hilog.info(this.domainId, this.logTag, `=== Data UUID Debug ===`);
+      hilog.info(this.domainId, this.logTag, `Service UUID: ${this.IMAGE_SERVICE_UUID}`);
+      hilog.info(this.domainId, this.logTag, `Data Property UUID: ${this.IMAGE_DATA_PROPERTY_UUID}`);
+      hilog.info(this.domainId, this.logTag, `Data size: ${packetData.byteLength} bytes`);
+      hilog.info(this.domainId, this.logTag, `====================`);
 
       // 发送数据包 - 使用 WRITE_NO_RESPONSE 以提高传输效率
       await this.client.writeProperty(dataProperty, ssap.PropertyWriteType.WRITE_NO_RESPONSE);
