@@ -183,9 +183,51 @@ export class SleClientService {
     if (!this.client) return;
     
     try {
+      hilog.info(this.domainId, this.logTag, 'Starting service discovery...');
       const result = await this.client.getServices();
       this.services = result;
-      hilog.info(this.domainId, this.logTag, `Got services: ${JSON.stringify(result)}`);
+      
+      hilog.info(this.domainId, this.logTag, `=== Service Discovery Result ===`);
+      hilog.info(this.domainId, this.logTag, `Total services found: ${result.length}`);
+      
+      // 详细打印每个服务
+      result.forEach((service, index) => {
+        hilog.info(this.domainId, this.logTag, `Service ${index}: UUID=${service.serviceUuid}`);
+        if (service.properties && service.properties.length > 0) {
+          service.properties.forEach((property, propIndex) => {
+            hilog.info(this.domainId, this.logTag, `  Property ${propIndex}: UUID=${property.propertyUuid}`);
+            hilog.info(this.domainId, this.logTag, `    Property details: ${JSON.stringify(property)}`);
+          });
+        } else {
+          hilog.info(this.domainId, this.logTag, `  No properties found for service ${index}`);
+        }
+      });
+      
+      // 查找我们需要的图片传输服务
+      const imageService = result.find(service => service.serviceUuid === this.IMAGE_SERVICE_UUID);
+      if (imageService) {
+        hilog.info(this.domainId, this.logTag, `✓ Found image transfer service: ${this.IMAGE_SERVICE_UUID}`);
+        const dataProperty = imageService.properties?.find(prop => prop.propertyUuid === this.IMAGE_DATA_PROPERTY_UUID);
+        const controlProperty = imageService.properties?.find(prop => prop.propertyUuid === this.IMAGE_CONTROL_PROPERTY_UUID);
+        
+        if (dataProperty) {
+          hilog.info(this.domainId, this.logTag, `✓ Found data property: ${this.IMAGE_DATA_PROPERTY_UUID}`);
+          hilog.info(this.domainId, this.logTag, `  Data property details: ${JSON.stringify(dataProperty)}`);
+        } else {
+          hilog.error(this.domainId, this.logTag, `✗ Data property not found: ${this.IMAGE_DATA_PROPERTY_UUID}`);
+        }
+        
+        if (controlProperty) {
+          hilog.info(this.domainId, this.logTag, `✓ Found control property: ${this.IMAGE_CONTROL_PROPERTY_UUID}`);
+          hilog.info(this.domainId, this.logTag, `  Control property details: ${JSON.stringify(controlProperty)}`);
+        } else {
+          hilog.error(this.domainId, this.logTag, `✗ Control property not found: ${this.IMAGE_CONTROL_PROPERTY_UUID}`);
+        }
+      } else {
+        hilog.error(this.domainId, this.logTag, `✗ Image transfer service not found: ${this.IMAGE_SERVICE_UUID}`);
+      }
+      
+      hilog.info(this.domainId, this.logTag, `===============================`);
     } catch (error) {
       const err = error as BusinessError;
       hilog.error(this.domainId, this.logTag, `Get services failed: ${err.code}, ${err.message}`);
