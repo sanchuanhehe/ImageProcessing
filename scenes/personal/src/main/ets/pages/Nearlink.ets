@@ -54,6 +54,16 @@ export struct NearlinkPage {
     return this.getUIContext().getHostContext() as common.UIAbilityContext;
   }
 
+  // 安全获取处理后的数据长度
+  private getProcessedDataLength(): number {
+    try {
+      return this.processedDataArray?.length || 0;
+    } catch (error) {
+      console.error('Error getting processed data length:', error);
+      return 0;
+    }
+  }
+
   // 4色调色板
   private colors: Color[] = [
     { r: 0, g: 0, b: 0 } as Color,           // 黑色 0x000000 => 0x0
@@ -319,7 +329,7 @@ export struct NearlinkPage {
                 .fontSize(10)
                 .fontColor(Color.Green)
                 .margin({ top: 4 })
-              Text(`${this.processedDataArray.length}字节`)
+              Text(`${this.getProcessedDataLength()}字节`)
                 .fontSize(8)
                 .fontColor($r('sys.color.ohos_id_color_text_tertiary'))
                 .margin({ top: 2 })
@@ -1190,22 +1200,36 @@ export struct NearlinkPage {
 
   // 生成C数组数据
   private generateCArrayData(buffer: ArrayBuffer, width: number, height: number): Uint8Array {
-    const pixels = new Uint8Array(buffer);
-    const result: number[] = [];
-    
-    // 每4个像素打包成一个字节
-    for (let i = 0; i < pixels.length; i += 16) { // 每次处理4个像素，每个像素4字节
-      const pixel1 = this.compareColor(pixels, i);
-      const pixel2 = this.compareColor(pixels, i + 4);
-      const pixel3 = this.compareColor(pixels, i + 8);
-      const pixel4 = this.compareColor(pixels, i + 12);
+    try {
+      if (!buffer || buffer.byteLength === 0) {
+        console.error('generateCArrayData: Invalid buffer');
+        return new Uint8Array();
+      }
       
-      // 将4个2位值打包成一个8位值
-      const packedValue = (pixel1 << 6) | (pixel2 << 4) | (pixel3 << 2) | pixel4;
-      result.push(packedValue);
+      const pixels = new Uint8Array(buffer);
+      const result: number[] = [];
+      
+      console.log(`Generating C array data from ${pixels.length} bytes (${width}x${height})`);
+      
+      // 每4个像素打包成一个字节
+      for (let i = 0; i < pixels.length; i += 16) { // 每次处理4个像素，每个像素4字节
+        const pixel1 = this.compareColor(pixels, i);
+        const pixel2 = this.compareColor(pixels, i + 4);
+        const pixel3 = this.compareColor(pixels, i + 8);
+        const pixel4 = this.compareColor(pixels, i + 12);
+        
+        // 将4个2位值打包成一个8位值
+        const packedValue = (pixel1 << 6) | (pixel2 << 4) | (pixel3 << 2) | pixel4;
+        result.push(packedValue);
+      }
+      
+      const resultArray = new Uint8Array(result);
+      console.log(`Generated C array data: ${resultArray.length} bytes`);
+      return resultArray;
+    } catch (error) {
+      console.error('generateCArrayData failed:', error);
+      return new Uint8Array();
     }
-    
-    return new Uint8Array(result);
   }
 
   // 比较颜色并返回索引
@@ -1224,7 +1248,7 @@ export struct NearlinkPage {
 
   // 发送处理后的图片数据
   async sendProcessedImage(): Promise<void> {
-    if (!this.processedDataArray.length || !this.isConnected) {
+    if (!this.processedDataArray?.length || !this.isConnected) {
       this.showToast('无法发送图片');
       return;
     }
@@ -1234,6 +1258,10 @@ export struct NearlinkPage {
       this.transferProgress = 0;
       
       // 转换为ArrayBuffer发送
+      if (!this.processedDataArray || this.processedDataArray.length === 0) {
+        throw new Error('No processed data available');
+      }
+      
       const arrayBuffer = new ArrayBuffer(this.processedDataArray.length);
       const view = new Uint8Array(arrayBuffer);
       view.set(this.processedDataArray);
