@@ -73,6 +73,22 @@ export struct NearlinkPage {
     }
   }
 
+  // 验证媒体文件URI格式是否正确
+  private isValidMediaUri(uri: string): boolean {
+    try {
+      // 标准媒体文件URI格式: 'file://media/Photo/<id>/IMG_datetime_0001/displayName.jpg'
+      const mediaUriPattern = /^file:\/\/media\/(Photo|Audio)\/\d+\/(IMG|VID|AUD)_\d+_\d+\/.+\.(jpg|jpeg|png|gif|webp|bmp|mp4|mp3|wav)$/i;
+      
+      // 也接受content://和datashare://格式的URI
+      const contentUriPattern = /^(content:\/\/|datashare:\/\/)/i;
+      
+      return mediaUriPattern.test(uri) || contentUriPattern.test(uri);
+    } catch (error) {
+      console.error('URI validation failed:', error);
+      return false;
+    }
+  }
+
   async aboutToAppear(): Promise<void> {
     // 初始化 SLE 客户端服务
     await this.sleClientService.initialize();
@@ -586,11 +602,15 @@ export struct NearlinkPage {
         // 配置查询条件，使用PhotoViewPicker返回的uri进行查询
         predicates.equalTo('uri', imageUri);
         
+        // 使用文档推荐的支持临时授权的PhotoKeys
         const fetchOption: photoAccessHelper.FetchOptions = {
           fetchColumns: [
+            photoAccessHelper.PhotoKeys.URI,
             photoAccessHelper.PhotoKeys.WIDTH, 
             photoAccessHelper.PhotoKeys.HEIGHT,
-            photoAccessHelper.PhotoKeys.DISPLAY_NAME
+            photoAccessHelper.PhotoKeys.DISPLAY_NAME,
+            photoAccessHelper.PhotoKeys.PHOTO_TYPE,
+            photoAccessHelper.PhotoKeys.SIZE
           ],
           predicates: predicates
         };
@@ -602,9 +622,18 @@ export struct NearlinkPage {
           const width = asset.get(photoAccessHelper.PhotoKeys.WIDTH) as number;
           const height = asset.get(photoAccessHelper.PhotoKeys.HEIGHT) as number;
           const displayName = asset.get(photoAccessHelper.PhotoKeys.DISPLAY_NAME) as string;
+          const photoType = asset.get(photoAccessHelper.PhotoKeys.PHOTO_TYPE) as number;
+          const fileSize = asset.get(photoAccessHelper.PhotoKeys.SIZE) as number;
           const isValidSize = width === 240 && height === 416;
           
-          console.log(`PhotoAccessHelper - Image: ${displayName}, Size: ${width}x${height}, Required: 240x416, Valid: ${isValidSize}`);
+          console.log(`PhotoAccessHelper - Validation Details:`);
+          console.log(`  URI: ${asset.uri}`);
+          console.log(`  Display Name: ${displayName}`);
+          console.log(`  Size: ${width}x${height}`);
+          console.log(`  Photo Type: ${photoType}`);
+          console.log(`  File Size: ${fileSize} bytes`);
+          console.log(`  Required: 240x416`);
+          console.log(`  Valid Size: ${isValidSize}`);
           
           if (!isValidSize) {
             console.warn(`Size mismatch: expected 240x416, got ${width}x${height}`);
@@ -662,9 +691,14 @@ export struct NearlinkPage {
     try {
       console.log(`Getting image data from media URI: ${imageUri}`);
       
-      // 验证URI
+      // 验证URI格式
       if (!imageUri || imageUri.trim() === '') {
         throw new Error('图片URI无效');
+      }
+      
+      // 验证是否为标准媒体文件URI格式
+      if (!this.isValidMediaUri(imageUri)) {
+        console.warn(`URI may not be standard media format: ${imageUri}`);
       }
 
       // 方法1: 使用PhotoAccessHelper获取PhotoAsset然后创建PixelMap（推荐方法）
@@ -675,25 +709,46 @@ export struct NearlinkPage {
         
         predicates.equalTo('uri', imageUri);
         
+        // 根据文档使用支持临时授权的PhotoKeys
         const fetchOption: photoAccessHelper.FetchOptions = {
           fetchColumns: [
+            photoAccessHelper.PhotoKeys.URI,
             photoAccessHelper.PhotoKeys.WIDTH, 
-            photoAccessHelper.PhotoKeys.HEIGHT
+            photoAccessHelper.PhotoKeys.HEIGHT,
+            photoAccessHelper.PhotoKeys.DISPLAY_NAME,
+            photoAccessHelper.PhotoKeys.SIZE,
+            photoAccessHelper.PhotoKeys.PHOTO_TYPE
           ],
           predicates: predicates
         };
         
         const fetchResult = await phAccessHelper.getAssets(fetchOption);
-        const asset = await fetchResult.getFirstObject();
-        
-        if (asset) {
-          console.log(`PhotoAccessHelper - Getting pixel data for: ${asset.displayName}`);
+        if (fetchResult && fetchResult.getCount() > 0) {
+          const asset = await fetchResult.getFirstObject();
           
-          // 使用PhotoAsset创建ImageSource
-          const imageSource = image.createImageSource(asset.uri);
-          if (imageSource) {
-            const pixelMap = await imageSource.createPixelMap();
-            if (pixelMap) {
+          if (asset) {
+            console.log(`PhotoAccessHelper - Asset found:`);
+            console.log(`  Display Name: ${asset.displayName}`);
+            console.log(`  URI: ${asset.uri}`);
+            console.log(`  Photo Type: ${asset.photoType}`);
+            console.log(`  Width: ${asset.get(photoAccessHelper.PhotoKeys.WIDTH)}`);
+            console.log(`  Height: ${asset.get(photoAccessHelper.PhotoKeys.HEIGHT)}`);
+            console.log(`  Size: ${asset.get(photoAccessHelper.PhotoKeys.SIZE)} bytes`);
+            
+            try {
+              // 使用PhotoAsset的URI创建ImageSource
+              const imageSource = image.createImageSource(asset.uri);
+              if (!imageSource) {
+                console.error('Failed to create ImageSource from asset URI');
+                throw new Error('ImageSource creation failed');
+              }
+              
+              const pixelMap = await imageSource.createPixelMap();
+              if (!pixelMap) {
+                console.error('Failed to create PixelMap from ImageSource');
+                throw new Error('PixelMap creation failed');
+              }
+              
               const imageInfo = await pixelMap.getImageInfo();
               if (imageInfo && imageInfo.size) {
                 const width = imageInfo.size.width;
@@ -706,14 +761,27 @@ export struct NearlinkPage {
                 const buffer = new ArrayBuffer(bufferSize);
                 await pixelMap.readPixelsToBuffer(buffer);
                 
-                // 关闭资源
+                // 释放资源
+                pixelMap.release();
+                imageSource.release();
                 fetchResult.close();
                 
                 console.log(`PhotoAccessHelper - Successfully read ${buffer.byteLength} bytes`);
                 return buffer;
+              } else {
+                throw new Error('Failed to get image info');
               }
+            } catch (processingError) {
+              console.error('Error processing asset:', processingError);
+              throw processingError;
             }
+          } else {
+            console.error('No asset found for URI');
+            throw new Error('No asset found');
           }
+        } else {
+          console.error('No fetch result or empty result');
+          throw new Error('No fetch result');
         }
         
         // 确保关闭fetchResult
@@ -725,27 +793,60 @@ export struct NearlinkPage {
       // 方法2: 直接使用URI创建ImageSource作为备用方法
       try {
         console.log('Using fallback ImageSource method...');
+        console.log(`Original URI: ${imageUri}`);
         
-        const imageSource = image.createImageSource(imageUri);
-        if (imageSource) {
-          const pixelMap = await imageSource.createPixelMap();
-          if (pixelMap) {
-            const imageInfo = await pixelMap.getImageInfo();
-            if (imageInfo && imageInfo.size) {
-              const width = imageInfo.size.width;
-              const height = imageInfo.size.height;
-              
-              console.log(`Fallback - Image size: ${width}x${height}`);
-              
-              const rowDataSize = width * 4;
-              const bufferSize = rowDataSize * height;
-              const buffer = new ArrayBuffer(bufferSize);
-              await pixelMap.readPixelsToBuffer(buffer);
-              
-              console.log(`Fallback - Successfully read ${buffer.byteLength} bytes`);
-              return buffer;
-            }
-          }
+        // 根据文档，标准媒体URI格式应该是 'file://media/Photo/...'
+        let processedUri = imageUri;
+        
+        // 检查并处理不同格式的URI
+        if (imageUri.startsWith('file://media/Photo/') || 
+            imageUri.startsWith('file://media/Audio/') ||
+            imageUri.startsWith('content://') || 
+            imageUri.startsWith('datashare://')) {
+          console.log('Using standard media URI format');
+          processedUri = imageUri;
+        } else if (!imageUri.startsWith('file://')) {
+          // 如果不是标准格式，尝试添加file://前缀
+          processedUri = imageUri.startsWith('/') ? `file://${imageUri}` : `file:///${imageUri}`;
+          console.log(`Converted to file URI: ${processedUri}`);
+        }
+        
+        console.log(`Processing URI: ${processedUri}`);
+        
+        const imageSource = image.createImageSource(processedUri);
+        if (!imageSource) {
+          console.error(`Failed to create ImageSource from URI: ${processedUri}`);
+          throw new Error('ImageSource creation failed from URI');
+        }
+        
+        console.log('ImageSource created successfully from URI');
+        
+        const pixelMap = await imageSource.createPixelMap();
+        if (!pixelMap) {
+          console.error('Failed to create PixelMap from ImageSource');
+          throw new Error('PixelMap creation failed from URI');
+        }
+        
+        const imageInfo = await pixelMap.getImageInfo();
+        if (imageInfo && imageInfo.size) {
+          const width = imageInfo.size.width;
+          const height = imageInfo.size.height;
+          
+          console.log(`Fallback - Image size: ${width}x${height}`);
+          
+          const rowDataSize = width * 4;
+          const bufferSize = rowDataSize * height;
+          const buffer = new ArrayBuffer(bufferSize);
+          await pixelMap.readPixelsToBuffer(buffer);
+          
+          // 释放资源
+          pixelMap.release();
+          imageSource.release();
+          
+          console.log(`Fallback - Successfully read ${buffer.byteLength} bytes`);
+          return buffer;
+        } else {
+          throw new Error('Failed to get image info from fallback method');
         }
       } catch (fallbackError) {
         console.error('Fallback method also failed:', fallbackError);
@@ -771,15 +872,29 @@ export struct NearlinkPage {
       this.isProcessing = true;
       this.showToast('正在处理图片...');
 
-      // 获取原始图片数据
+      // 获取原始图片数据 - 添加错误检查
       const imageSource = image.createImageSource(this.selectedImageUri);
+      if (!imageSource) {
+        throw new Error('无法创建ImageSource');
+      }
+      
       const pixelMap = await imageSource.createPixelMap();
+      if (!pixelMap) {
+        throw new Error('无法创建PixelMap');
+      }
       
       // 缩放到目标尺寸
       const scaledPixelMap = await this.scalePixelMapToTarget(pixelMap);
+      if (!scaledPixelMap) {
+        throw new Error('图片缩放失败');
+      }
       
       // 获取像素数据
       const imageInfo = await scaledPixelMap.getImageInfo();
+      if (!imageInfo || !imageInfo.size) {
+        throw new Error('无法获取图片信息');
+      }
+      
       const bufferSize = imageInfo.size.width * imageInfo.size.height * 4;
       const buffer = new ArrayBuffer(bufferSize);
       await scaledPixelMap.readPixelsToBuffer(buffer);
@@ -793,12 +908,33 @@ export struct NearlinkPage {
       // 生成C数组数据
       this.processedDataArray = this.generateCArrayData(processedBuffer, imageInfo.size.width, imageInfo.size.height);
       
+      // 释放资源
+      pixelMap.release();
+      scaledPixelMap.release();
+      imageSource.release();
+      
       this.showToast('图片处理完成');
       
     } catch (error) {
       const err = error as BusinessError;
       console.error('Process image failed:', err);
-      this.showToast(`图片处理失败: ${err.message}`);
+      console.error('Error details:', {
+        message: err.message,
+        code: err.code,
+        name: err.name,
+        selectedImageUri: this.selectedImageUri
+      });
+      
+      let errorMessage = '图片处理失败';
+      if (err.message && err.message.includes('createPixelMap')) {
+        errorMessage = '无法解析图片格式，请选择其他图片';
+      } else if (err.message && err.message.includes('ImageSource')) {
+        errorMessage = '无法读取图片文件，请检查文件路径';
+      } else if (err.message) {
+        errorMessage = `处理失败: ${err.message}`;
+      }
+      
+      this.showToast(errorMessage);
     } finally {
       this.isProcessing = false;
     }
@@ -806,18 +942,33 @@ export struct NearlinkPage {
 
   // 缩放PixelMap到目标尺寸
   private async scalePixelMapToTarget(pixelMap: image.PixelMap): Promise<image.PixelMap> {
-    const imageInfo = await pixelMap.getImageInfo();
-    const originalWidth = imageInfo.size.width;
-    const originalHeight = imageInfo.size.height;
-    
-    // 如果已经是目标尺寸，直接返回
-    if (originalWidth === this.targetWidth && originalHeight === this.targetHeight) {
+    try {
+      const imageInfo = await pixelMap.getImageInfo();
+      if (!imageInfo || !imageInfo.size) {
+        throw new Error('无法获取图片信息');
+      }
+      
+      const originalWidth = imageInfo.size.width;
+      const originalHeight = imageInfo.size.height;
+      
+      console.log(`Original size: ${originalWidth}x${originalHeight}, Target: ${this.targetWidth}x${this.targetHeight}`);
+      
+      // 如果已经是目标尺寸，直接返回副本
+      if (originalWidth === this.targetWidth && originalHeight === this.targetHeight) {
+        console.log('Image already at target size');
+        return pixelMap;
+      }
+      
+      // 直接缩放原PixelMap（scale方法会修改原对象）
+      await pixelMap.scale(this.targetWidth, this.targetHeight);
+      
+      console.log(`Successfully scaled to ${this.targetWidth}x${this.targetHeight}`);
       return pixelMap;
+      
+    } catch (error) {
+      console.error('Scale PixelMap failed:', error);
+      throw new Error(`图片缩放失败: ${error}`);
     }
-    
-    // 缩放到目标尺寸
-    await pixelMap.scale(this.targetWidth, this.targetHeight);
-    return pixelMap;
   }
 
   // Floyd-Steinberg抖动算法
@@ -946,6 +1097,8 @@ export struct NearlinkPage {
     this.processedImageUri = `processed_${Date.now()}`;
     console.log('Image processing completed, ready for transmission');
   }
+
+
 
   // 生成C数组数据
   private generateCArrayData(buffer: ArrayBuffer, width: number, height: number): Uint8Array {
