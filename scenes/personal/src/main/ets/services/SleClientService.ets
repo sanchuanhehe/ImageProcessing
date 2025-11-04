@@ -275,6 +275,11 @@ export class SleClientService {
     } catch (error) {
       const err = error as BusinessError;
       hilog.error(this.domainId, this.logTag, `Send control command failed: ${err.code}, ${err.message}`);
+      
+      // 如果发送失败，重新获取服务信息进行调试
+      hilog.error(this.domainId, this.logTag, '=== Debugging service discovery on failure ===');
+      await this.getServices();
+      
       return false;
     }
   }
