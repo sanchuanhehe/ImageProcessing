@@ -15,9 +15,9 @@ export class SleClientService {
   private connectedDeviceAddress: string = '';
   
   // 图片传输服务 UUID（与服务端保持一致）
-  private readonly IMAGE_SERVICE_UUID = '0x1234';
-  private readonly IMAGE_DATA_PROPERTY_UUID = '0x5678';
-  private readonly IMAGE_CONTROL_PROPERTY_UUID = '0x9ABC';
+  private readonly IMAGE_SERVICE_UUID = '1234';
+  private readonly IMAGE_DATA_PROPERTY_UUID = '5678';
+  private readonly IMAGE_CONTROL_PROPERTY_UUID = '9ABC';
   
   // 日志标签
   private readonly logTag: string = 'SleClientService';
