@@ -436,6 +436,7 @@ export struct NearlinkPage {
       
       // 检查尺寸是否为 240×416
       const isValidSize = imageInfo.size.width === 240 && imageInfo.size.height === 416;
+      console.log(`Image size: ${imageInfo.size.width}x${imageInfo.size.height}, valid: ${isValidSize}`);
       
       return isValidSize;
     } catch (error) {
