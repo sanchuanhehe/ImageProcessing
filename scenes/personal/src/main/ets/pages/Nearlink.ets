@@ -67,7 +67,7 @@ export struct NearlinkPage {
     .hideTitleBar(true)
     .backgroundColor($r('sys.color.ohos_id_color_sub_background'))
     .padding({
-      top: this.topRectHeight,
+      top: px2vp(this.topRectHeight),
       bottom: this.bottomRectHeight
     })
   }

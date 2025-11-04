@@ -27,7 +27,7 @@ export struct NewPage {
     .alignItems(HorizontalAlign.Center)
     .backgroundColor($r('app.color.main_background_color'))
     .padding({
-      top: this.topRectHeight,
+      top: px2vp(this.topRectHeight),
       left: 16,
       right: 16
     })
