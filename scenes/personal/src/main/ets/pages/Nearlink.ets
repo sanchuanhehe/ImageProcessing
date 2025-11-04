@@ -26,8 +26,11 @@ export struct NearlinkPage {
   
   // 图片传输相关状态
   @State selectedImageUri: string = '';
+  @State processedImageUri: string = '';
+  @State isProcessing: boolean = false;
   @State isTransferring: boolean = false;
   @State transferProgress: number = 0;
+  @State processedDataArray: Uint8Array = new Uint8Array();
   
   // SLE 客户端服务
   private sleClientService: SleClientService = SleClientService.getInstance();
@@ -35,7 +38,19 @@ export struct NearlinkPage {
   // 获取UIAbilityContext
   private getContext(): common.UIAbilityContext {
     return this.getUIContext().getHostContext() as common.UIAbilityContext;
-  }  // 安全显示 Toast 消息
+  }
+
+  // 4色调色板
+  private colors = [
+    { r: 0, g: 0, b: 0 },           // 黑色 0x000000 => 0x0
+    { r: 255, g: 255, b: 255 },     // 白色 0xffffff => 0x1
+    { r: 255, g: 255, b: 0 },       // 黄色 0xffff00 => 0x2
+    { r: 255, g: 0, b: 0 },         // 红色 0xff0000 => 0x3
+  ];
+
+  // 目标尺寸
+  private readonly targetWidth = 240;
+  private readonly targetHeight = 416;  // 安全显示 Toast 消息
   private showToast(message: string): void {
     try {
       promptAction.showToast({ message: message });
@@ -214,39 +229,110 @@ export struct NearlinkPage {
       .width('100%')
       .margin({ bottom: 12 })
 
-      // 图片选择区域
-      Column() {
-        if (this.selectedImageUri) {
-          Image(this.selectedImageUri)
-            .width(120)
-            .height(208) // 保持 240:416 的比例
+      // 图片选择和预览区域
+      Row() {
+        // 原图区域
+        Column() {
+          Text('原图')
+            .fontSize(12)
+            .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+            .margin({ bottom: 4 })
+          
+          if (this.selectedImageUri) {
+            Image(this.selectedImageUri)
+              .width(100)
+              .height(173) // 保持 240:416 的比例
+              .borderRadius(8)
+              .objectFit(ImageFit.Contain)
+          } else {
+            Column() {
+              Image($r('app.media.add_image'))
+                .width(20)
+                .height(20)
+              Text('选择图片')
+                .fontSize(10)
+                .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+                .margin({ top: 4 })
+              Text('240×416尺寸')
+                .fontSize(8)
+                .fontColor($r('sys.color.ohos_id_color_text_tertiary'))
+                .margin({ top: 2 })
+            }
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+            .width(100)
+            .height(173)
             .borderRadius(8)
-            .objectFit(ImageFit.Contain)
-        } else {
-          Column() {
-            Image($r('app.media.add_image'))
-              .width(24)
-              .height(24)
-            Text('选择图片')
-              .fontSize(12)
-              .fontColor($r('sys.color.ohos_id_color_text_secondary'))
-              .margin({ top: 4 })
-            Text('必须为240×416尺寸')
-              .fontSize(10)
-              .fontColor($r('sys.color.ohos_id_color_text_tertiary'))
-              .margin({ top: 2 })
+            .backgroundColor('#E5E5EA')
           }
-          .justifyContent(FlexAlign.Center)
-          .alignItems(HorizontalAlign.Center)
-          .width(120)
-          .height(208)
-          .borderRadius(8)
-          .backgroundColor('#E5E5EA')
+        }
+        .onClick(() => {
+          this.choosePicture()
+        })
+
+        Blank().width(10)
+
+        // 处理后图片区域
+        Column() {
+          Text('处理后')
+            .fontSize(12)
+            .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+            .margin({ bottom: 4 })
+          
+          if (this.processedImageUri) {
+            Column() {
+              Image($r('app.media.add_image'))
+                .width(20)
+                .height(20)
+                .fillColor(Color.Green)
+              Text('处理完成')
+                .fontSize(10)
+                .fontColor(Color.Green)
+                .margin({ top: 4 })
+              Text(`${this.processedDataArray.length}字节`)
+                .fontSize(8)
+                .fontColor($r('sys.color.ohos_id_color_text_tertiary'))
+                .margin({ top: 2 })
+            }
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+            .width(100)
+            .height(173)
+            .borderRadius(8)
+            .backgroundColor('#E8F5E8')
+          } else if (this.isProcessing) {
+            Column() {
+              LoadingProgress()
+                .width(20)
+                .height(20)
+              Text('处理中...')
+                .fontSize(10)
+                .fontColor($r('sys.color.ohos_id_color_text_secondary'))
+                .margin({ top: 4 })
+            }
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+            .width(100)
+            .height(173)
+            .borderRadius(8)
+            .backgroundColor('#F5F5F5')
+          } else {
+            Column() {
+              Text('待处理')
+                .fontSize(10)
+                .fontColor($r('sys.color.ohos_id_color_text_tertiary'))
+            }
+            .justifyContent(FlexAlign.Center)
+            .alignItems(HorizontalAlign.Center)
+            .width(100)
+            .height(173)
+            .borderRadius(8)
+            .backgroundColor('#F5F5F5')
+          }
         }
       }
-      .onClick(() => {
-        this.choosePicture()
-      })
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
 
       // 传输进度
       if (this.isTransferring) {
@@ -267,16 +353,30 @@ export struct NearlinkPage {
         .margin({ top: 12 })
       }
 
-      // 传输按钮
+      // 操作按钮
       if (this.selectedImageUri && !this.isTransferring) {
         Row() {
-          Button('发送图片')
-            .fontSize(14)
-            .backgroundColor(Color.Blue)
-            .fontColor(Color.White)
-            .onClick(() => {
-              this.sendSelectedImage()
-            })
+          // 处理按钮
+          if (!this.processedImageUri && !this.isProcessing) {
+            Button('处理图片')
+              .fontSize(14)
+              .backgroundColor(Color.Green)
+              .fontColor(Color.White)
+              .onClick(() => {
+                this.processSelectedImage()
+              })
+          }
+          
+          // 发送按钮 - 只有处理完成后才能发送
+          if (this.processedImageUri) {
+            Button('发送图片')
+              .fontSize(14)
+              .backgroundColor(Color.Blue)
+              .fontColor(Color.White)
+              .onClick(() => {
+                this.sendProcessedImage()
+              })
+          }
           
           Blank()
           
@@ -285,7 +385,7 @@ export struct NearlinkPage {
             .backgroundColor(Color.Orange)
             .fontColor(Color.White)
             .onClick(() => {
-              this.selectedImageUri = ''
+              this.resetImageState()
             })
         }
         .width('100%')
@@ -382,9 +482,17 @@ export struct NearlinkPage {
     this.connectedDeviceName = '';
     this.connectionStatus = '未连接';
     // 清理传图状态
+    this.resetImageState();
+  }
+
+  // 重置图片状态
+  private resetImageState(): void {
     this.selectedImageUri = '';
+    this.processedImageUri = '';
+    this.isProcessing = false;
     this.isTransferring = false;
     this.transferProgress = 0;
+    this.processedDataArray = new Uint8Array();
   }
 
   // 开始连接状态监听
@@ -533,50 +641,7 @@ export struct NearlinkPage {
     }
   }
 
-  // 发送选中的图片
-  async sendSelectedImage(): Promise<void> {
-    if (!this.selectedImageUri || !this.isConnected) {
-      this.showToast('无法发送图片');
-      return;
-    }
 
-    try {
-      this.isTransferring = true;
-      this.transferProgress = 0;
-      
-      // 发送前再次验证图片尺寸
-      const isValid = await this.validateImageSize(this.selectedImageUri);
-      if (!isValid) {
-        this.showToast('图片尺寸不符合要求（需要240×416）');
-        this.selectedImageUri = ''; // 清空不合格的图片
-        return;
-      }
-      
-      // 获取图片数据
-      const imageData = await this.getImageArrayBuffer(this.selectedImageUri);
-      
-      // 发送图片数据，带进度回调
-      const success = await this.sleClientService.sendImageData(
-        imageData,
-        (sent: number, total: number) => {
-          this.transferProgress = (sent / total) * 100;
-        }
-      );
-      
-      if (success) {
-        this.showToast('图片传输成功');
-        this.selectedImageUri = ''; // 清空已选择的图片
-      } else {
-        this.showToast('图片传输失败');
-      }
-    } catch (error) {
-      const err = error as BusinessError;
-      this.showToast(`传输失败: ${err.message}`);
-    } finally {
-      this.isTransferring = false;
-      this.transferProgress = 0;
-    }
-  }
 
   // 获取图片的ArrayBuffer数据 - 使用PhotoAccessHelper标准方法
   async getImageArrayBuffer(imageUri: string): Promise<ArrayBuffer> {
@@ -678,6 +743,263 @@ export struct NearlinkPage {
       const err = error as BusinessError;
       console.error('Get image array buffer failed:', err);
       throw new Error(`获取图片数据失败: ${err.message}`);
+    }
+  }
+
+  // 处理选中的图片
+  async processSelectedImage(): Promise<void> {
+    if (!this.selectedImageUri) {
+      this.showToast('请先选择图片');
+      return;
+    }
+
+    try {
+      this.isProcessing = true;
+      this.showToast('正在处理图片...');
+
+      // 获取原始图片数据
+      const imageSource = image.createImageSource(this.selectedImageUri);
+      const pixelMap = await imageSource.createPixelMap();
+      
+      // 缩放到目标尺寸
+      const scaledPixelMap = await this.scalePixelMapToTarget(pixelMap);
+      
+      // 获取像素数据
+      const imageInfo = await scaledPixelMap.getImageInfo();
+      const bufferSize = imageInfo.size.width * imageInfo.size.height * 4;
+      const buffer = new ArrayBuffer(bufferSize);
+      await scaledPixelMap.readPixelsToBuffer(buffer);
+      
+      // 应用Floyd-Steinberg抖动算法
+      const processedBuffer = this.applyFloydSteinbergDithering(buffer, imageInfo.size.width, imageInfo.size.height);
+      
+      // 标记处理完成
+      this.markProcessingComplete();
+      
+      // 生成C数组数据
+      this.processedDataArray = this.generateCArrayData(processedBuffer, imageInfo.size.width, imageInfo.size.height);
+      
+      this.showToast('图片处理完成');
+      
+    } catch (error) {
+      const err = error as BusinessError;
+      console.error('Process image failed:', err);
+      this.showToast(`图片处理失败: ${err.message}`);
+    } finally {
+      this.isProcessing = false;
+    }
+  }
+
+  // 缩放PixelMap到目标尺寸
+  private async scalePixelMapToTarget(pixelMap: image.PixelMap): Promise<image.PixelMap> {
+    const imageInfo = await pixelMap.getImageInfo();
+    const originalWidth = imageInfo.size.width;
+    const originalHeight = imageInfo.size.height;
+    
+    // 如果已经是目标尺寸，直接返回
+    if (originalWidth === this.targetWidth && originalHeight === this.targetHeight) {
+      return pixelMap;
+    }
+    
+    // 缩放到目标尺寸
+    await pixelMap.scale(this.targetWidth, this.targetHeight);
+    return pixelMap;
+  }
+
+  // Floyd-Steinberg抖动算法
+  private applyFloydSteinbergDithering(buffer: ArrayBuffer, width: number, height: number): ArrayBuffer {
+    const pixels = new Uint8Array(buffer);
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const index = (y * width + x) * 4;
+        
+        // 获取原始像素
+        const oldPixel = {
+          r: pixels[index],
+          g: pixels[index + 1],
+          b: pixels[index + 2]
+        };
+        
+        // 找到最接近的颜色
+        const newPixel = this.findNearestColor(oldPixel);
+        
+        // 设置新像素颜色
+        pixels[index] = newPixel.r;
+        pixels[index + 1] = newPixel.g;
+        pixels[index + 2] = newPixel.b;
+        pixels[index + 3] = 255; // alpha
+        
+        // 计算量化误差
+        const quantErrorR = oldPixel.r - newPixel.r;
+        const quantErrorG = oldPixel.g - newPixel.g;
+        const quantErrorB = oldPixel.b - newPixel.b;
+        
+        // 分发误差到相邻像素
+        this.distributeFloydSteinbergError(pixels, width, height, x, y, quantErrorR, quantErrorG, quantErrorB);
+      }
+    }
+    
+    return buffer;
+  }
+
+  // 找到最接近的颜色
+  private findNearestColor(pixel: { r: number, g: number, b: number }): { r: number, g: number, b: number } {
+    let nearestColor = this.colors[0];
+    let minDistance = this.colorDistance(pixel, this.colors[0]);
+    
+    for (let i = 1; i < this.colors.length; i++) {
+      const distance = this.colorDistance(pixel, this.colors[i]);
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestColor = this.colors[i];
+      }
+    }
+    
+    return nearestColor;
+  }
+
+  // 计算颜色距离
+  private colorDistance(c1: { r: number, g: number, b: number }, c2: { r: number, g: number, b: number }): number {
+    return Math.sqrt(
+      Math.pow(c1.r - c2.r, 2) +
+      Math.pow(c1.g - c2.g, 2) +
+      Math.pow(c1.b - c2.b, 2)
+    );
+  }
+
+  // 分发Floyd-Steinberg误差
+  private distributeFloydSteinbergError(
+    pixels: Uint8Array, 
+    width: number, 
+    height: number, 
+    x: number, 
+    y: number, 
+    quantErrorR: number, 
+    quantErrorG: number, 
+    quantErrorB: number
+  ): void {
+    // Floyd-Steinberg权重
+    const weights = [
+      { dx: 1, dy: 0, weight: 7 / 16 },   // 右
+      { dx: -1, dy: 1, weight: 3 / 16 },  // 左下
+      { dx: 0, dy: 1, weight: 5 / 16 },   // 下
+      { dx: 1, dy: 1, weight: 1 / 16 }    // 右下
+    ];
+
+    weights.forEach(({ dx, dy, weight }) => {
+      const nx = x + dx;
+      const ny = y + dy;
+      
+      if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+        const index = (ny * width + nx) * 4;
+        pixels[index] = this.clamp(pixels[index] + quantErrorR * weight);
+        pixels[index + 1] = this.clamp(pixels[index + 1] + quantErrorG * weight);
+        pixels[index + 2] = this.clamp(pixels[index + 2] + quantErrorB * weight);
+      }
+    });
+  }
+
+  // 限制值在0-255范围内
+  private clamp(value: number): number {
+    return Math.max(0, Math.min(255, value));
+  }
+
+  // 从buffer创建PixelMap（简化版）
+  private async createPixelMapFromBuffer(buffer: ArrayBuffer, width: number, height: number): Promise<image.PixelMap> {
+    try {
+      // 创建一个简单的PixelMap
+      const options: image.InitializationOptions = {
+        size: { width: width, height: height },
+        pixelFormat: image.PixelMapFormat.RGBA_8888,
+        editable: true
+      };
+      
+      const pixelMap = await image.createPixelMap(buffer, options);
+      return pixelMap;
+    } catch (error) {
+      console.error('Create PixelMap from buffer failed:', error);
+      throw error;
+    }
+  }
+
+  // 将处理后的数据标记为已完成（简化实现）
+  private markProcessingComplete(): void {
+    // 生成一个唯一标识表示处理完成
+    this.processedImageUri = `processed_${Date.now()}`;
+    console.log('Image processing completed, ready for transmission');
+  }
+
+  // 生成C数组数据
+  private generateCArrayData(buffer: ArrayBuffer, width: number, height: number): Uint8Array {
+    const pixels = new Uint8Array(buffer);
+    const result: number[] = [];
+    
+    // 每4个像素打包成一个字节
+    for (let i = 0; i < pixels.length; i += 16) { // 每次处理4个像素，每个像素4字节
+      const pixel1 = this.compareColor(pixels, i);
+      const pixel2 = this.compareColor(pixels, i + 4);
+      const pixel3 = this.compareColor(pixels, i + 8);
+      const pixel4 = this.compareColor(pixels, i + 12);
+      
+      // 将4个2位值打包成一个8位值
+      const packedValue = (pixel1 << 6) | (pixel2 << 4) | (pixel3 << 2) | pixel4;
+      result.push(packedValue);
+    }
+    
+    return new Uint8Array(result);
+  }
+
+  // 比较颜色并返回索引
+  private compareColor(pixels: Uint8Array, index: number): number {
+    const r = pixels[index];
+    const g = pixels[index + 1];
+    const b = pixels[index + 2];
+    
+    for (let i = 0; i < this.colors.length; i++) {
+      if (r === this.colors[i].r && g === this.colors[i].g && b === this.colors[i].b) {
+        return i;
+      }
+    }
+    return 0; // 默认返回黑色
+  }
+
+  // 发送处理后的图片数据
+  async sendProcessedImage(): Promise<void> {
+    if (!this.processedDataArray.length || !this.isConnected) {
+      this.showToast('无法发送图片');
+      return;
+    }
+
+    try {
+      this.isTransferring = true;
+      this.transferProgress = 0;
+      
+      // 转换为ArrayBuffer发送
+      const arrayBuffer = new ArrayBuffer(this.processedDataArray.length);
+      const view = new Uint8Array(arrayBuffer);
+      view.set(this.processedDataArray);
+      
+      // 发送图片数据，带进度回调
+      const success = await this.sleClientService.sendImageData(
+        arrayBuffer,
+        (sent: number, total: number) => {
+          this.transferProgress = (sent / total) * 100;
+        }
+      );
+      
+      if (success) {
+        this.showToast('图片传输成功');
+        this.resetImageState(); // 清空状态
+      } else {
+        this.showToast('图片传输失败');
+      }
+    } catch (error) {
+      const err = error as BusinessError;
+      this.showToast(`传输失败: ${err.message}`);
+    } finally {
+      this.isTransferring = false;
+      this.transferProgress = 0;
     }
   }
 }
