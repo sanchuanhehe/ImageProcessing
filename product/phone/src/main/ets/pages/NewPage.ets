@@ -27,13 +27,17 @@ export struct NewPage {
     .alignItems(HorizontalAlign.Center)
     .backgroundColor($r('app.color.main_background_color'))
     .padding({
-      top: px2vp(this.topRectHeight),
+      top: this.topRectHeight,
       left: 16,
       right: 16
     })
   }
 
   showNotOpenToast() {
-    promptAction.showToast({ message: '当前功能暂未实现' })
+    try {
+      promptAction.showToast({ message: '当前功能暂未实现' })
+    } catch (error) {
+      console.error('Show toast failed:', error);
+    }
   }
 }

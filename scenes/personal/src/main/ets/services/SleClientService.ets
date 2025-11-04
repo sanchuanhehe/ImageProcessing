@@ -71,7 +71,7 @@ export class SleClientService {
     } catch (error) {
       const err = error as BusinessError;
       hilog.error(this.domainId, this.logTag, `Start scan failed: ${err.code}, ${err.message}`);
-      throw error;
+      throw new Error(`Start scan failed: ${err.message}`);
     }
   }
 
