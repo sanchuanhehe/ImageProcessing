@@ -773,7 +773,7 @@ export struct NearlinkPage {
               }
             } catch (processingError) {
               console.error('Error processing asset:', processingError);
-              throw processingError;
+              throw new Error(`Error processing asset: ${processingError}`);
             }
           } else {
             console.error('No asset found for URI');
