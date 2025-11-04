@@ -559,7 +559,10 @@ export struct NearlinkPage {
       const result = await photoViewPicker.select(photoSelectOptions);
       if (result.photoUris && result.photoUris.length > 0) {
         const imageUri = result.photoUris[0];
-        console.log(`Selected image URI: ${imageUri}`);
+        console.log(`=== Selected image URI ===`);
+        console.log(`URI: ${imageUri}`);
+        console.log(`URI Format Valid: ${this.isValidMediaUri(imageUri)}`);
+        console.log(`========================`);
         
         // 立即验证图片尺寸
         this.showToast('正在验证图片尺寸...');
@@ -567,6 +570,7 @@ export struct NearlinkPage {
         const isValid = await this.validateImageSize(imageUri);
         if (isValid) {
           this.selectedImageUri = imageUri;
+          console.log(`Image URI stored successfully: ${this.selectedImageUri}`);
           this.showToast('图片选择成功');
         } else {
           this.selectedImageUri = '';
@@ -872,15 +876,12 @@ export struct NearlinkPage {
       this.isProcessing = true;
       this.showToast('正在处理图片...');
 
-      // 获取原始图片数据 - 添加错误检查
-      const imageSource = image.createImageSource(this.selectedImageUri);
-      if (!imageSource) {
-        throw new Error('无法创建ImageSource');
-      }
-      
-      const pixelMap = await imageSource.createPixelMap();
+      console.log(`Processing image with URI: ${this.selectedImageUri}`);
+
+      // 通过PhotoAccessHelper正确处理媒体URI获取PixelMap
+      const pixelMap = await this.createPixelMapFromMediaUri(this.selectedImageUri);
       if (!pixelMap) {
-        throw new Error('无法创建PixelMap');
+        throw new Error('无法从媒体URI创建PixelMap');
       }
       
       // 缩放到目标尺寸
@@ -910,26 +911,31 @@ export struct NearlinkPage {
       
       // 释放资源
       pixelMap.release();
-      scaledPixelMap.release();
-      imageSource.release();
+      if (scaledPixelMap !== pixelMap) {
+        scaledPixelMap.release();
+      }
       
       this.showToast('图片处理完成');
       
     } catch (error) {
       const err = error as BusinessError;
-      console.error('Process image failed:', err);
+      console.error('=== Process image failed ===');
+      console.error('Error:', err);
       console.error('Error details:', {
         message: err.message,
         code: err.code,
         name: err.name,
         selectedImageUri: this.selectedImageUri
       });
+      console.error('==========================');
       
       let errorMessage = '图片处理失败';
-      if (err.message && err.message.includes('createPixelMap')) {
-        errorMessage = '无法解析图片格式，请选择其他图片';
-      } else if (err.message && err.message.includes('ImageSource')) {
-        errorMessage = '无法读取图片文件，请检查文件路径';
+      if (err.message && (err.message.includes('createPixelMap') || err.message.includes('PixelMap'))) {
+        errorMessage = '无法解析图片格式，请重新选择图片';
+      } else if (err.message && (err.message.includes('ImageSource') || err.message.includes('media URI'))) {
+        errorMessage = '无法读取媒体文件，请重新选择图片';
+      } else if (err.message && err.message.includes('PhotoAccessHelper')) {
+        errorMessage = '媒体访问失败，请检查图片权限';
       } else if (err.message) {
         errorMessage = `处理失败: ${err.message}`;
       }
@@ -1088,6 +1094,88 @@ export struct NearlinkPage {
     } catch (error) {
       console.error('Create PixelMap from buffer failed:', error);
       throw new Error(`Create PixelMap from buffer failed: ${error}`);
+    }
+  }
+
+  // 从媒体URI创建PixelMap - 正确处理媒体文件URI
+  private async createPixelMapFromMediaUri(mediaUri: string): Promise<image.PixelMap> {
+    try {
+      console.log(`Creating PixelMap from media URI: ${mediaUri}`);
+      
+      // 验证URI格式
+      if (!mediaUri || mediaUri.trim() === '') {
+        throw new Error('Media URI is invalid');
+      }
+
+      // 通过PhotoAccessHelper获取PhotoAsset
+      const context = this.getContext();
+      const phAccessHelper = photoAccessHelper.getPhotoAccessHelper(context);
+      const predicates = new dataSharePredicates.DataSharePredicates();
+      
+      predicates.equalTo('uri', mediaUri);
+      
+      const fetchOption: photoAccessHelper.FetchOptions = {
+        fetchColumns: [
+          photoAccessHelper.PhotoKeys.URI,
+          photoAccessHelper.PhotoKeys.DISPLAY_NAME
+        ],
+        predicates: predicates
+      };
+      
+      const fetchResult = await phAccessHelper.getAssets(fetchOption);
+      if (!fetchResult || fetchResult.getCount() === 0) {
+        throw new Error('No asset found for the provided URI');
+      }
+      
+      const asset = await fetchResult.getFirstObject();
+      if (!asset) {
+        fetchResult.close();
+        throw new Error('Failed to get asset from fetch result');
+      }
+      
+      console.log(`Asset found: ${asset.displayName}, URI: ${asset.uri}`);
+      
+      try {
+        // 方法1: 使用PhotoAsset的getThumbnail方法（推荐用于显示）
+        const pixelMap = await asset.getThumbnail();
+        fetchResult.close();
+        
+        if (pixelMap) {
+          console.log('Successfully created PixelMap using getThumbnail method');
+          return pixelMap;
+        } else {
+          throw new Error('getThumbnail returned null');
+        }
+      } catch (thumbnailError) {
+        console.warn('getThumbnail failed, trying alternative method:', thumbnailError);
+        
+        // 方法2: 使用asset.getReadOnlyFd()方法
+        try {
+          const fd = await asset.getReadOnlyFd();
+          const imageSource = image.createImageSource(fd);
+          if (!imageSource) {
+            throw new Error('Failed to create ImageSource from fd');
+          }
+          
+          const pixelMap = await imageSource.createPixelMap();
+          imageSource.release();
+          fetchResult.close();
+          
+          if (pixelMap) {
+            console.log('Successfully created PixelMap using fd method');
+            return pixelMap;
+          } else {
+            throw new Error('createPixelMap from fd returned null');
+          }
+        } catch (fdError) {
+          fetchResult.close();
+          throw new Error(`Both methods failed. Thumbnail: ${thumbnailError}, FD: ${fdError}`);
+        }
+      }
+      
+    } catch (error) {
+      console.error('createPixelMapFromMediaUri failed:', error);
+      throw new Error(`Failed to create PixelMap from media URI: ${error}`);
     }
   }
 
