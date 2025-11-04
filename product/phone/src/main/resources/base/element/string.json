@@ -15,6 +15,14 @@
     {
       "name": "read_image",
       "value": "电子纸应用模板"
+    },
+    {
+      "name": "permission_reason_nearlink",
+      "value": "需要访问 NearLink 功能以连接设备进行图片传输"
+    },
+    {
+      "name": "permission_reason_media",
+      "value": "需要访问媒体文件以选择和读取图片进行传输"
     }
   ]
 }
