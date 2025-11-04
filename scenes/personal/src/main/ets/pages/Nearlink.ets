@@ -83,16 +83,35 @@ export struct NearlinkPage {
           .fontSize(14)
           .fontColor(this.isConnected ? Color.Green : Color.Red)
         Blank()
-        Text(this.connectedDeviceName)
-          .fontSize(12)
-          .fontColor($r('sys.color.ohos_id_color_text_tertiary'))
+        
+        if (this.isConnected) {
+          Button('断开连接')
+            .fontSize(12)
+            .backgroundColor(Color.Red)
+            .fontColor(Color.White)
+            .onClick(() => {
+              this.disconnectDevice();
+            })
+        }
       }
       .width('100%')
-        .padding(12)
+      .alignItems(VerticalAlign.Center)
+
+      if (this.connectedDeviceName) {
+        Row() {
+          Text(`已连接设备: ${this.connectedDeviceName}`)
+            .fontSize(12)
+            .fontColor($r('sys.color.ohos_id_color_text_tertiary'))
+            .margin({ top: 4 })
+        }
+        .width('100%')
+      }
     }
+    .alignItems(HorizontalAlign.Start)
     .backgroundColor($r('sys.color.comp_background_list_card'))
-      .borderRadius(16)
-      .margin({ left: 16, right: 16, bottom: 16 })
+    .borderRadius(16)
+    .padding(12)
+    .margin({ left: 16, right: 16, bottom: 16 })
   }
 
   @Builder
@@ -216,6 +235,8 @@ export struct NearlinkPage {
         this.connectedDeviceName = deviceName;
         this.connectionStatus = '已连接';
         this.showToast(`连接到 ${deviceName} 成功`);
+        // 开始监听连接状态
+        this.startConnectionMonitoring();
       } else {
         this.connectionStatus = '连接失败';
         this.showToast('连接设备失败');
@@ -225,5 +246,45 @@ export struct NearlinkPage {
       const err = error as BusinessError;
       this.showToast(`连接失败: ${err.message}`);
     }
+  }
+
+  // 断开连接
+  async disconnectDevice(): Promise<void> {
+    try {
+      this.connectionStatus = '断开中...';
+      await this.sleClientService.disconnect();
+      this.resetConnectionState();
+      this.showToast('已断开连接');
+    } catch (error) {
+      this.connectionStatus = '断开失败';
+      const err = error as BusinessError;
+      this.showToast(`断开连接失败: ${err.message}`);
+    }
+  }
+
+  // 重置连接状态
+  private resetConnectionState(): void {
+    this.isConnected = false;
+    this.connectedDeviceName = '';
+    this.connectionStatus = '未连接';
+  }
+
+  // 开始连接状态监听
+  private startConnectionMonitoring(): void {
+    // 每2秒检查一次连接状态
+    const checkConnection = () => {
+      if (this.isConnected) {
+        const isStillConnected = this.sleClientService.getConnectionState();
+        if (!isStillConnected) {
+          // 连接意外断开，自动更新状态
+          this.resetConnectionState();
+          this.showToast('设备连接已断开');
+        } else {
+          // 继续监听
+          setTimeout(checkConnection, 2000);
+        }
+      }
+    };
+    setTimeout(checkConnection, 2000);
   }
 }
