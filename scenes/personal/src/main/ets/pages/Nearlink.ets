@@ -1162,40 +1162,58 @@ export struct NearlinkPage {
       console.log(`Asset found: ${asset.displayName}, URI: ${asset.uri}`);
       
       try {
-        // 方法1: 使用PhotoAsset的getThumbnail方法（推荐用于显示）
-        const pixelMap = await asset.getThumbnail();
+        // 方法1: 优先使用asset.getReadOnlyFd()方法获取原始尺寸图像
+        console.log('Attempting to get original image using fd method...');
+        const fd = await asset.getReadOnlyFd();
+        const imageSource = image.createImageSource(fd);
+        if (!imageSource) {
+          throw new Error('Failed to create ImageSource from fd');
+        }
+        
+        // 获取原始图像信息
+        const imageInfo = await imageSource.getImageInfo();
+        console.log(`=== Original Image Info ===`);
+        console.log(`Original image size: ${imageInfo.size.width}x${imageInfo.size.height}`);
+        console.log(`===========================`);
+        
+        const pixelMap = await imageSource.createPixelMap();
+        imageSource.release();
         fetchResult.close();
         
         if (pixelMap) {
-          console.log('Successfully created PixelMap using getThumbnail method');
+          // 验证PixelMap尺寸
+          const pixelMapInfo = await pixelMap.getImageInfo();
+          console.log(`=== Created PixelMap Info ===`);
+          console.log(`PixelMap size: ${pixelMapInfo.size.width}x${pixelMapInfo.size.height}`);
+          console.log('Successfully created PixelMap using fd method (original size)');
+          console.log(`============================`);
           return pixelMap;
         } else {
-          throw new Error('getThumbnail returned null');
+          throw new Error('createPixelMap from fd returned null');
         }
-      } catch (thumbnailError) {
-        console.warn('getThumbnail failed, trying alternative method:', thumbnailError);
+      } catch (fdError) {
+        console.warn('fd method failed, trying getThumbnail as fallback:', fdError);
         
-        // 方法2: 使用asset.getReadOnlyFd()方法
+        // 方法2: 降级使用getThumbnail方法（可能返回固定尺寸缩略图）
         try {
-          const fd = await asset.getReadOnlyFd();
-          const imageSource = image.createImageSource(fd);
-          if (!imageSource) {
-            throw new Error('Failed to create ImageSource from fd');
-          }
-          
-          const pixelMap = await imageSource.createPixelMap();
-          imageSource.release();
+          const pixelMap = await asset.getThumbnail();
           fetchResult.close();
           
           if (pixelMap) {
-            console.log('Successfully created PixelMap using fd method');
+            // 检查缩略图尺寸
+            const thumbnailInfo = await pixelMap.getImageInfo();
+            console.log(`=== Thumbnail Fallback Info ===`);
+            console.log(`Thumbnail size: ${thumbnailInfo.size.width}x${thumbnailInfo.size.height}`);
+            console.log(`WARNING: Using thumbnail as fallback - may not be original size!`);
+            console.log('Successfully created PixelMap using getThumbnail method');
+            console.log(`==============================`);
             return pixelMap;
           } else {
-            throw new Error('createPixelMap from fd returned null');
+            throw new Error('getThumbnail returned null');
           }
-        } catch (fdError) {
+        } catch (thumbnailError) {
           fetchResult.close();
-          throw new Error(`Both methods failed. Thumbnail: ${thumbnailError}, FD: ${fdError}`);
+          throw new Error(`Both methods failed. FD: ${fdError}, Thumbnail: ${thumbnailError}`);
         }
       }
       
