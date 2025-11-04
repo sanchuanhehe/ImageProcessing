@@ -23,6 +23,19 @@ export class SleClientService {
   // 日志标签
   private readonly logTag: string = 'SleClientService';
   private readonly domainId: number = 0x0000;
+  
+  // 重传机制相关变量
+  private sentPackets: Map<number, ArrayBuffer> = new Map();  // 缓存已发送的包
+  private isTransferring: boolean = false;
+  
+  // 传输统计信息
+  private transferStats = {
+    totalPackets: 0,
+    sentPackets: 0,
+    retransmittedPackets: 0,
+    startTime: 0,
+    lastPacketTime: 0
+  };
 
   private constructor() {}
 
@@ -140,6 +153,8 @@ export class SleClientService {
       // 延时获取服务列表
       setTimeout(async () => {
         await this.getServices();
+        // 注册重传请求监听
+        this.registerRetransmitCallback();
       }, 500);
       
       return true;
@@ -319,6 +334,61 @@ export class SleClientService {
   }
 
   /**
+   * 注册重传请求回调
+   */
+  private registerRetransmitCallback(): void {
+    if (!this.client) return;
+    
+    try {
+      const retransmitCallback = (data: ssap.Property) => {
+        if (data.serviceUuid === this.IMAGE_SERVICE_UUID && 
+            data.propertyUuid === this.IMAGE_CONTROL_PROPERTY_UUID) {
+          this.handleRetransmitRequest(data.value);
+        }
+      };
+      
+      this.client.on('propertyChange', retransmitCallback);
+      hilog.info(this.domainId, this.logTag, 'Registered retransmit callback');
+    } catch (error) {
+      const err = error as BusinessError;
+      hilog.error(this.domainId, this.logTag, `Register retransmit callback failed: ${err.code}, ${err.message}`);
+    }
+  }
+
+  /**
+   * 处理服务端的重传请求
+   */
+  private async handleRetransmitRequest(requestData: ArrayBuffer): Promise<void> {
+    if (!this.isTransferring || requestData.byteLength < 3) {
+      return;
+    }
+    
+    const requestView = new Uint8Array(requestData);
+    const command = requestView[0];
+    
+    if (command === 0x05) { // IMAGE_CMD_REQUEST_RETRANSMIT
+      const count = requestView[1] | (requestView[2] << 8);
+      hilog.info(this.domainId, this.logTag, `Received retransmit request for ${count} packets`);
+      
+      // 解析需要重传的包序号列表
+      for (let i = 0; i < count && (3 + i * 2 + 1) < requestData.byteLength; i++) {
+        const packetIndex = requestView[3 + i * 2] | (requestView[4 + i * 2] << 8);
+        
+        // 查找并重传指定的包
+        const packetData = this.sentPackets.get(packetIndex);
+        if (packetData) {
+          hilog.info(this.domainId, this.logTag, `Retransmitting packet ${packetIndex + 1}`);
+          await this.sendImageDataPacket(packetData);
+          // 添加重传延迟
+          await this.delay(20);
+        } else {
+          hilog.error(this.domainId, this.logTag, `Packet ${packetIndex + 1} not found in cache`);
+        }
+      }
+    }
+  }
+
+  /**
    * 发送完整图片（分包传输）
    */
   public async sendImageData(
@@ -330,6 +400,10 @@ export class SleClientService {
     const totalPackets = Math.ceil(totalSize / maxPacketSize);
     
     try {
+      // 清空之前的包缓存并设置传输状态
+      this.sentPackets.clear();
+      this.isTransferring = true;
+      
       hilog.info(this.domainId, this.logTag, 
         `Starting image transfer: ${totalSize} bytes, ${totalPackets} packets`);
 
@@ -362,9 +436,13 @@ export class SleClientService {
         const chunkArray = new Uint8Array(chunkData);
         packetData.set(chunkArray, 4);
         
+        // 缓存数据包用于可能的重传
+        this.sentPackets.set(packetIndex, packetBuffer.slice(0));
+        
         // 发送数据包
         if (!await this.sendImageDataPacket(packetBuffer)) {
           hilog.error(this.domainId, this.logTag, `Failed to send packet ${packetIndex + 1}`);
+          this.isTransferring = false;
           return false;
         }
 
@@ -374,17 +452,27 @@ export class SleClientService {
         }
 
         // 添加小延迟避免数据拥塞
-        await this.delay(10);
+        await this.delay(20); // 增加延迟到20ms，减少丢包概率
       }
 
       // 3. 发送传输完成命令
       await this.sendImageControlCommand(0x04); // IMAGE_CMD_TRANSFER_COMPLETE
+      
+      // 保持缓存一段时间以处理可能的重传请求
+      setTimeout(() => {
+        this.sentPackets.clear();
+        this.isTransferring = false;
+        hilog.info(this.domainId, this.logTag, 'Cleared packet cache after transfer completion');
+      }, 10000); // 10秒后清理缓存
       
       hilog.info(this.domainId, this.logTag, 'Image transfer completed successfully');
       return true;
     } catch (error) {
       const err = error as BusinessError;
       hilog.error(this.domainId, this.logTag, `Image transfer failed: ${err.code}, ${err.message}`);
+      // 清理状态
+      this.sentPackets.clear();
+      this.isTransferring = false;
       return false;
     }
   }
@@ -458,6 +546,14 @@ export class SleClientService {
       this.scanResults = [];
       this.isConnected = false;
       this.connectedDeviceAddress = '';
+      
+      // 清理重传机制资源
+      this.sentPackets.clear();
+      this.isTransferring = false;
+      
+      // 清理重传相关资源
+      this.sentPackets.clear();
+      this.isTransferring = false;
       
       hilog.info(this.domainId, this.logTag, 'SLE client service destroyed');
     } catch (error) {
