@@ -354,7 +354,7 @@ export class SleClientService {
         const packetBuffer = new ArrayBuffer(4 + chunkData.byteLength);
         const packetView = new DataView(packetBuffer);
         
-        packetView.setUint16(0, packetIndex + 1, true); // 包序号从1开始
+        packetView.setUint16(0, packetIndex, true); // 包序号从0开始
         packetView.setUint16(2, totalPackets, true); // 总包数
         
         // 复制数据
