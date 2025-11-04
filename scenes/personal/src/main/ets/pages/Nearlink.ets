@@ -905,19 +905,35 @@ export struct NearlinkPage {
         throw new Error('无法获取图片信息');
       }
       
-      const bufferSize = imageInfo.size.width * imageInfo.size.height * 4;
+      const width = imageInfo.size.width;
+      const height = imageInfo.size.height;
+      const bufferSize = width * height * 4; // RGBA
+      
+      console.log(`=== Image Processing Info ===`);
+      console.log(`Final image size: ${width}x${height}`);
+      console.log(`Total pixels: ${width * height}`);
+      console.log(`Buffer size: ${bufferSize} bytes`);
+      console.log(`Expected result: ${Math.ceil((width * height) / 4)} bytes`);
+      console.log(`============================`);
+      
       const buffer = new ArrayBuffer(bufferSize);
       await scaledPixelMap.readPixelsToBuffer(buffer);
       
       // 应用Floyd-Steinberg抖动算法
-      const processedBuffer = this.applyFloydSteinbergDithering(buffer, imageInfo.size.width, imageInfo.size.height);
+      const processedBuffer = this.applyFloydSteinbergDithering(buffer, width, height);
       
       // 标记处理完成
       this.markProcessingComplete();
       
       // 生成C数组数据
-      this.processedDataArray = this.generateCArrayData(processedBuffer, imageInfo.size.width, imageInfo.size.height);
+      this.processedDataArray = this.generateCArrayData(processedBuffer, width, height);
       this.processedDataLength = this.processedDataArray.length; // 更新长度用于UI显示
+      
+      console.log(`=== Final Result ===`);
+      console.log(`Processed data length: ${this.processedDataLength} bytes`);
+      console.log(`For ${width}x${height} image = ${width * height} pixels`);
+      console.log(`Compression ratio: ${((width * height * 4) / this.processedDataLength).toFixed(2)}:1`);
+      console.log(`==================`)
       
       // 释放资源
       pixelMap.release();
@@ -1209,14 +1225,25 @@ export struct NearlinkPage {
       const pixels = new Uint8Array(buffer);
       const result: number[] = [];
       
-      console.log(`Generating C array data from ${pixels.length} bytes (${width}x${height})`);
+      const totalPixels = width * height;
+      const expectedBytes = Math.ceil(totalPixels / 4); // 4个像素打包成1字节
       
-      // 每4个像素打包成一个字节
-      for (let i = 0; i < pixels.length; i += 16) { // 每次处理4个像素，每个像素4字节
-        const pixel1 = this.compareColor(pixels, i);
-        const pixel2 = this.compareColor(pixels, i + 4);
-        const pixel3 = this.compareColor(pixels, i + 8);
-        const pixel4 = this.compareColor(pixels, i + 12);
+      console.log(`=== C Array Generation Debug ===`);
+      console.log(`Image dimensions: ${width}x${height}`);
+      console.log(`Total pixels: ${totalPixels}`);
+      console.log(`Input buffer: ${pixels.length} bytes (${pixels.length / 4} pixels)`);
+      console.log(`Expected output: ${expectedBytes} bytes`);
+      console.log(`===============================`);
+      
+      // 按像素处理，每4个像素打包成一个字节
+      const totalPixelCount = pixels.length / 4; // 每个像素4字节(RGBA)
+      
+      for (let pixelIndex = 0; pixelIndex < totalPixelCount; pixelIndex += 4) {
+        // 获取4个像素的颜色索引
+        const pixel1 = pixelIndex < totalPixelCount ? this.compareColor(pixels, pixelIndex * 4) : 0;
+        const pixel2 = pixelIndex + 1 < totalPixelCount ? this.compareColor(pixels, (pixelIndex + 1) * 4) : 0;
+        const pixel3 = pixelIndex + 2 < totalPixelCount ? this.compareColor(pixels, (pixelIndex + 2) * 4) : 0;
+        const pixel4 = pixelIndex + 3 < totalPixelCount ? this.compareColor(pixels, (pixelIndex + 3) * 4) : 0;
         
         // 将4个2位值打包成一个8位值
         const packedValue = (pixel1 << 6) | (pixel2 << 4) | (pixel3 << 2) | pixel4;
@@ -1224,7 +1251,13 @@ export struct NearlinkPage {
       }
       
       const resultArray = new Uint8Array(result);
-      console.log(`Generated C array data: ${resultArray.length} bytes`);
+      console.log(`=== Generation Result ===`);
+      console.log(`Input pixel count: ${pixels.length / 4}`);
+      console.log(`Processed pixel groups: ${result.length}`);
+      console.log(`Generated: ${resultArray.length} bytes`);
+      console.log(`Expected: ${expectedBytes} bytes`);
+      console.log(`Match: ${resultArray.length === expectedBytes ? '✅ CORRECT' : '❌ INCORRECT'}`);
+      console.log(`========================`);
       return resultArray;
     } catch (error) {
       console.error('generateCArrayData failed:', error);
@@ -1234,16 +1267,38 @@ export struct NearlinkPage {
 
   // 比较颜色并返回索引
   private compareColor(pixels: Uint8Array, index: number): number {
+    // 边界检查
+    if (index + 2 >= pixels.length) {
+      console.warn(`compareColor: index ${index} out of bounds (${pixels.length})`);
+      return 0;
+    }
+    
     const r = pixels[index];
     const g = pixels[index + 1];
     const b = pixels[index + 2];
     
+    // 寻找最接近的颜色
+    let bestMatch = 0;
+    let minDistance = Number.MAX_VALUE;
+    
     for (let i = 0; i < this.colors.length; i++) {
-      if (r === this.colors[i].r && g === this.colors[i].g && b === this.colors[i].b) {
+      // 计算颜色距离
+      const distance = Math.abs(r - this.colors[i].r) + 
+                      Math.abs(g - this.colors[i].g) + 
+                      Math.abs(b - this.colors[i].b);
+      
+      if (distance < minDistance) {
+        minDistance = distance;
+        bestMatch = i;
+      }
+      
+      // 如果找到完全匹配，直接返回
+      if (distance === 0) {
         return i;
       }
     }
-    return 0; // 默认返回黑色
+    
+    return bestMatch;
   }
 
   // 发送处理后的图片数据
