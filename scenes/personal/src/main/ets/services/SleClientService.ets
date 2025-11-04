@@ -18,7 +18,7 @@ export class SleClientService {
   // 服务端base UUID: 37BEA880-FC70-11EA-B720-0000
   private readonly IMAGE_SERVICE_UUID = '37BEA880-FC70-11EA-B720-000000001234';
   private readonly IMAGE_DATA_PROPERTY_UUID = '37BEA880-FC70-11EA-B720-000000005678';
-  private readonly IMAGE_CONTROL_PROPERTY_UUID = '37BEA880-FC70-11EA-B720-00000000AB9C';
+  private readonly IMAGE_CONTROL_PROPERTY_UUID = '37BEA880-FC70-11EA-B720-000000009ABC';
   
   // 日志标签
   private readonly logTag: string = 'SleClientService';
